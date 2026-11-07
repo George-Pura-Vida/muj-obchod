@@ -1,6 +1,7 @@
 <?php
-// Zkopírujte na WebKitty jako config.local.php a nahraďte dlouhým náhodným klíčem.
-// Nikdy tento instalační klíč neukládejte do veřejného GitHub repozitáře.
+// Zkopíruj na WebKitty jako config.local.php a nahraď hodnotu silným náhodným klíčem
+// (minimálně 32 znaků). Záměrně neplatný výchozí klíč blokuje aktivaci.
+// Soubor config.local.php NIKDY nenahrávej na veřejný GitHub.
 return [
-    'setup_key' => 'NAHRADTE_VLASTNIM_NAHODNYM_KLICEM_ALESPOŇ_32_ZNAKŮ',
+    'setup_key' => 'CHANGE_ME',
 ];
