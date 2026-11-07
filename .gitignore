@@ -1,0 +1,11 @@
+config.local.php
+.env
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+node_modules/
+.DS_Store
+*.webm
+*.mp3
+*.m4a
