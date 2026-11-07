@@ -12,6 +12,7 @@ let view='overview', editingContactId=0, formKind='',formPrefill={};
 let personId=0, coachActivityId=0, recordActivityId=0, wantRecording=false;
 let recorder=null, recordStream=null, recordChunks=[],recordBlob=null,recordTimer=null,recordStart=0,recordObjectUrl=null;
 let toastTimer=null;
+let activePlaybackUrl=null, activePlaybackActivityId=0, activePlaybackRecordingId=0, activePlaybackExt='webm';
 function esc(v){return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function euros(v){return CZK.format(Number(v)||0);}
 function when(v){if(!v)return 'Bez termínu';const a=String(v).substring(0,10).split('-');return a.length===3?a[2]+'. '+Number(a[1])+'. '+a[0]:'—';}
@@ -153,7 +154,7 @@ function person(cid){
  html+='<section class="detail-section"><h3>📝 Schůzky, telefonáty a zápisy ('+acts.length+')</h3>';
  html+=acts.length?acts.map(a=>{
   const rec=recordings.filter(r=>+r.activity_id===+a.id);
-  return '<div class="detail-row"><div><b>'+esc(KINDS[a.kind]||'Poznámka')+' · '+when(a.happened_at)+'</b><small>'+esc(a.notes||'Bez poznámek')+' · '+esc(a.outcome||'')+'</small>'+(a.next_at?'<small>Další krok: '+when(a.next_at)+'</small>':'')+'</div><button data-coach="'+Number(a.id)+'">✨ AI trénink</button>'+(rec.length?'<button data-audio="'+Number(rec[0].id)+'">▶ Audio</button>':'<button data-record="'+Number(a.id)+'">🎙️ Nahrát</button>')+'</div>';
+  return '<div class="detail-row"><div><b>'+esc(KINDS[a.kind]||'Poznámka')+' · '+when(a.happened_at)+'</b><small>'+esc(a.notes||'Bez poznámek')+' · '+esc(a.outcome||'')+'</small>'+(a.next_at?'<small>Další krok: '+when(a.next_at)+'</small>':'')+'</div><button data-coach="'+Number(a.id)+'">✨ AI trénink</button>'+(rec.length?'<button data-audio="'+Number(rec[0].id)+'" data-activity="'+Number(a.id)+'">▶ Audio</button>':'<button data-record="'+Number(a.id)+'">🎙️ Nahrát</button>')+'</div>';
  }).join(''):noRows('Zatím žádná schůzka.');
  html+='</section><section class="detail-section"><h3>✍️ Smlouvy a provize ('+contracts.length+')</h3>';
  html+=contracts.length?contracts.map(x=>'<div class="detail-row"><div><b>'+esc(x.product)+'</b><small>Objem '+euros(x.value)+' · očekáváno '+euros(x.commission_expected)+' ('+when(x.expected_at)+')</small><small>Vyplaceno '+euros(x.commission_paid)+' ('+when(x.paid_at)+') · '+esc(x.status)+'</small></div></div>').join(''):noRows('Zatím bez smlouvy.');
@@ -315,11 +316,63 @@ async function saveAudio(){
  try{$('save-audio').disabled=true;await request('upload',fd,true);closeDialog('audio-dialog');await refresh();toast('Nahrávka uložena bezpečně ke schůzce. 🎙️');}
  catch(err){$('audio-error').textContent=err.message;$('save-audio').disabled=false;}
 }
+
+async function openPlayback(recordingId,activityId){
+ const info=store.recordings.find(r=>Number(r.id)===Number(recordingId));
+ activePlaybackActivityId=Number(activityId)||Number(info?.activity_id)||0;
+ activePlaybackRecordingId=Number(recordingId);
+ const status=$('playback-status'), error=$('playback-error'), player=$('playback-player');
+ $('playback-title').textContent='Přehrát schůzku ▶';
+ $('playback-coach').disabled=!activePlaybackActivityId;
+ $('playback-download').disabled=true;
+ player.pause();player.hidden=true;player.removeAttribute('src');player.load();
+ if(activePlaybackUrl){URL.revokeObjectURL(activePlaybackUrl);activePlaybackUrl=null;}
+ status.textContent='Načítám zabezpečenou nahrávku…';status.hidden=false;error.textContent='';
+ if($('person-dialog').open)$('person-dialog').close();
+ openDialog('playback-dialog');
+ try{
+  const response=await fetch('api.php?action=media&id='+encodeURIComponent(activePlaybackRecordingId),{credentials:'same-origin',cache:'no-store'});
+  if(!response.ok){
+   let msg='Server odmítl nahrávku (HTTP '+response.status+').';
+   try{const data=await response.json();if(data.error)msg=data.error;}catch(_){}
+   throw Error(msg);
+  }
+  const type=response.headers.get('Content-Type')||'';
+  if(/application\/json|text\/html/i.test(type))throw Error('Server nevrátil zvukový soubor. Zkontroluj přihlášení a dostupnost nahrávky.');
+  const blob=await response.blob();
+  if(!blob.size)throw Error('Na serveru je prázdná nahrávka (0 B). Zkontroluj, zda se při nahrávání zachytil zvuk.');
+  if(!$('playback-dialog').open||activePlaybackRecordingId!==Number(recordingId))return;
+  const ext=(info?.original_name||'').split('.').pop().toLowerCase();
+  activePlaybackExt=['webm','mp3','m4a','mp4','ogg','wav','aac'].includes(ext)?ext:'webm';
+  activePlaybackUrl=URL.createObjectURL(blob);
+  player.src=activePlaybackUrl;
+  player.hidden=false;
+  $('playback-download').disabled=false;
+  status.textContent='Nahrávka je načtená ('+(blob.size/1024/1024).toFixed(1)+' MB). Spusť ji tlačítkem ▶ v přehrávači.';
+  player.load();
+ }catch(e){
+  if(!$('playback-dialog').open)return;
+  status.hidden=true;
+  error.textContent=e.message+' Pokud se chyba opakuje, zkontroluj soubor a PHP server na WebKitty.';
+ }
+}
+function closePlayback(){
+ const player=$('playback-player');
+ player.pause();player.removeAttribute('src');player.load();
+ if(activePlaybackUrl){URL.revokeObjectURL(activePlaybackUrl);activePlaybackUrl=null;}
+ activePlaybackRecordingId=0;
+}
+function downloadPlayback(){
+ if(!activePlaybackUrl)return toast('Nahrávka ještě není načtená.',true);
+ const a=document.createElement('a');a.href=activePlaybackUrl;a.download='moje-schuzka-'+activePlaybackRecordingId+'.'+activePlaybackExt;
+ document.body.appendChild(a);a.click();a.remove();
+}
 function openCoach(id){
  const a=store.activities.find(x=>+x.id===+id);
  if(!a)return toast('Zápis nenalezen.',true);
  coachActivityId=+id;$('coach-transcript').value=a.transcript||'';$('coach-review').value=a.review||'';$('coach-error').textContent='';
  if($('person-dialog').open)$('person-dialog').close();
+ if($('playback-dialog').open)$('playback-dialog').close();
  openDialog('coach-dialog');
 }
 async function saveCoach(){
@@ -411,9 +464,7 @@ document.addEventListener('click',event=>{
  if(target.dataset.record){openAudio(Number(target.dataset.record));return;}
  if(target.dataset.coach){openCoach(Number(target.dataset.coach));return;}
  if(target.dataset.audio){
-  const id=Number(target.dataset.audio);
-  const audio=new Audio('api.php?action=media&id='+id);
-  audio.play().catch(()=>toast('Nahrávku nelze přehrát.',true));
+  openPlayback(Number(target.dataset.audio),Number(target.dataset.activity));
  }
 });
 $('auth-form').addEventListener('submit',async event=>{
@@ -483,5 +534,14 @@ $('audio-file').addEventListener('change',()=>{$('save-audio').disabled=!$('audi
 $('save-audio').addEventListener('click',saveAudio);
 $('coach-save').addEventListener('click',saveCoach);
 $('coach-copy').addEventListener('click',copyCoach);
+$('coach-open-chatgpt').addEventListener('click',()=>window.open('https://chatgpt.com/','_blank','noopener,noreferrer'));
+$('playback-download').addEventListener('click',downloadPlayback);
+$('playback-coach').addEventListener('click',()=>{if(activePlaybackActivityId)openCoach(activePlaybackActivityId);});
+$('playback-player').addEventListener('error',()=>{
+ if(!$('playback-player').getAttribute('src'))return;
+ $('playback-status').hidden=true;
+ $('playback-error').textContent='Prohlížeč neumí tento zvuk přehrát nebo je soubor poškozený. Zkus Stáhnout nahrávku a otevřít ji v přehrávači zařízení.';
+});
+$('playback-dialog').addEventListener('close',closePlayback);
 $('audio-dialog').addEventListener('close',()=>{if(recorder?.state==='recording')recorder.stop();clearInterval(recordTimer);recordStream?.getTracks().forEach(t=>t.stop());});
 start();
