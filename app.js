@@ -435,9 +435,48 @@ $('shade').addEventListener('click',()=>{$('sidebar').classList.remove('open');$
 $('logout').addEventListener('click',logout);
 $('import-action').addEventListener('click',()=>$('import-file').click());
 $('import-file').addEventListener('change',importFile);
-$('export-action').addEventListener('click',()=>{window.location.href='api.php?action=csv';});
+function excelSafe(value){
+ if(typeof value==='string' && /^[=+\-@\t\r]/.test(value))return "'"+value;
+ return value==null?'':value;
+}
+function exportExcel(){
+ if(!window.XLSX){window.location.href='api.php?action=csv';return;}
+ const workbook=XLSX.utils.book_new();
+ const sheets=[
+  ['Kontakty',store.contacts.map(c=>({
+   Jméno:c.first_name,Příjmení:c.last_name,Telefon:c.phone,'E-mail':c.email,Adresa:c.address,
+   'Zdroj kontaktu':c.source,Fáze:STAGES[c.stage]||c.stage,Poznámky:c.notes,'Další péče':c.next_care
+  }))],
+  ['Schůzky',store.activities.map(a=>({
+   Klient:fullname(a.contact_id),Typ:KINDS[a.kind]||a.kind,Datum:a.happened_at,
+   Zápis:a.notes,Výsledek:a.outcome,'Další kontakt':a.next_at,Přepis:a.transcript,'Moje hodnocení':a.review
+  }))],
+  ['Smlouvy a provize',store.contracts.map(c=>({
+   Klient:fullname(c.contact_id),Produkt:c.product,'Objem Kč':Number(c.value),'Očekávaná provize Kč':Number(c.commission_expected),
+   'Očekávaná výplata':c.expected_at,'Vyplacená provize Kč':Number(c.commission_paid),'Skutečná výplata':c.paid_at,Stav:c.status
+  }))],
+  ['Křížový prodej',store.opportunities.map(o=>({
+   Klient:fullname(o.contact_id),Produkt:o.product,Stav:o.status,'Objem potenciál Kč':Number(o.potential),
+   'Předpokládaná provize Kč':Number(o.expected_commission),'Další kontakt':o.next_at,Poznámky:o.notes
+  }))],
+  ['Doporučení',store.referrals.map(r=>({
+   'Doporučil klient':fullname(r.contact_id),'Doporučená osoba':r.name,Telefon:r.phone,
+   'Oprávnění k oslovení potvrzeno':Number(r.permission)?'Ano':'Ne',Poznámky:r.notes
+  }))]
+ ];
+ try{
+  for(const [name,rows] of sheets){
+   const safe=rows.map(r=>Object.fromEntries(Object.entries(r).map(([k,v])=>[k,excelSafe(v)])));
+   const ws=safe.length?XLSX.utils.json_to_sheet(safe):XLSX.utils.aoa_to_sheet([['Zatím žádná data']]);
+   XLSX.utils.book_append_sheet(workbook,ws,name);
+  }
+  XLSX.writeFile(workbook,'moje-schuzka-'+TODAY()+'.xlsx',{compression:true});
+  toast('Excel s kontakty, schůzkami i provizemi je připraven. 📊');
+ }catch(e){toast('Export do Excelu se nezdařil: '+e.message,true);}
+}
+$('export-action').addEventListener('click',exportExcel);
 $('backup-action').addEventListener('click',()=>downloadJSON('moje-schuzka-zaloha-'+TODAY()+'.json',JSON.stringify({exported_at:new Date().toISOString(),...store},null,2)));
-$('export-results').addEventListener('click',()=>downloadJSON('moje-schuzka-vysledky-'+TODAY()+'.json',JSON.stringify({exported_at:new Date().toISOString(),...store},null,2)));
+$('export-results').addEventListener('click',exportExcel);
 $('start-record').addEventListener('click',startRecording);
 $('stop-record').addEventListener('click',stopRecording);
 $('audio-file').addEventListener('change',()=>{$('save-audio').disabled=!$('audio-file').files.length;});
