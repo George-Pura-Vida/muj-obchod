@@ -5,11 +5,52 @@ const INT = new Intl.NumberFormat('cs-CZ');
 const TODAY = () => new Date().toLocaleDateString('en-CA');
 const STAGES = {contact:'Kontakt',phone:'Telefon',meeting1:'1. schůzka',meeting2:'Další schůzky',contract:'Smlouva',care:'Péče'};
 const KINDS = {phone:'📞 Telefonát',meeting1:'🤝 První schůzka',meeting2:'🤝 Druhá schůzka',meeting:'🤝 Další schůzka',email:'✉ E-mail',care:'💚 Péče',note:'✏️ Poznámka'};
+const FOLLOWUPS = {
+ phone:{label:'📞 Zavolat',kind:'phone',icon:'phone'},
+ meeting:{label:'🤝 Domluvit schůzku',kind:'meeting',icon:'calendar'},
+ email:{label:'✉️ Poslat e-mail nebo podklady',kind:'email',icon:'file'},
+ care:{label:'💚 Navázat péčí',kind:'care',icon:'heart'},
+ crosssell:{label:'🌱 Probrat další nabídku',kind:'meeting',icon:'branch'},
+ referral:{label:'🎁 Požádat o doporučení',kind:'phone',icon:'gift'},
+ cooperation:{label:'🤝 Probrat spolupráci',kind:'meeting',icon:'users'},
+ recruitment:{label:'👥 Probrat vstup do týmu',kind:'meeting',icon:'users'}
+};
+const ACTIVITY_RESULTS = {success:'✅ Úspěšná',open:'🟡 Otevřená',declined:'⚪ Bez dohody'};
 const PRODUCTS = ['Kovový účet','Zlato','Stříbro','Bitcoinový účet','Permanentní fond','Dragon fond','Životní pojištění','Úrazové pojištění','Pojištění majetku','Pojištění nemovitosti','Pojištění firmy','Pojištění auta','Pojištění odpovědnosti','Cestovní pojištění','Jiný produkt'];
+const COACHABLE_KINDS = ['phone','meeting1','meeting2','meeting'];
+const COACHING_STAGES = [
+ {id:'opening', emoji:'🤝', title:'Prolomení ledu a důvěra',
+  cue:'Přirozeně navážu kontakt, vysvětlím účel rozhovoru a domluvím rámec.',
+  exercise:'Představ si, že klient spěchá. Nacvič krátký, přirozený úvod a ověř, kolik má času.',
+  example:'„Děkuju, že jste si našel čas. Jak se vám dnes daří? Je pořád v pořádku, když spolu máme 15 minut?“'},
+ {id:'open_questions', emoji:'💬', title:'Otevřené otázky',
+  cue:'Nechám klienta popsat situaci vlastními slovy a dám mu prostor domluvit.',
+  exercise:'Klient říká, že chce mít v penězích větší pořádek. Polož dvě otevřené otázky a po každé chvíli počkej.',
+  example:'„Co byste si přál mít vyřešené jako první?“'},
+ {id:'narrowing', emoji:'🔎', title:'Zužující otázky',
+  cue:'Navazuji na odpověď klienta a postupně upřesňuji priority, důvody a čas.',
+  exercise:'Klient zmíní penzi i bydlení pro děti. Zjisti, co má přednost a proč.',
+  example:'„Zmínil jste penzi i bydlení pro děti. Co má pro vás větší prioritu v příštích dvou letech?“'},
+ {id:'closed_questions', emoji:'📌', title:'Uzavřené otázky',
+  cue:'Potvrzuji konkrétní fakta krátkými otázkami s jednoznačnou odpovědí.',
+  exercise:'Zopakuj jeden konkrétní údaj z rozhovoru a ověř ho otázkou ano/ne.',
+  example:'„Je pro vás důležité mít tyto peníze k dispozici do dvou let?“'},
+ {id:'verification', emoji:'🪞', title:'Ověření porozumění',
+  cue:'Shrnu klientovu situaci vlastními slovy a dám mu prostor mě doplnit nebo opravit.',
+  exercise:'Shrň dvě zjištěné priority vlastními slovy a vyžádej si korekci.',
+  example:'„Rozumím tomu správně, že nejdřív chcete vytvořit rezervu a potom řešit penzi? Co mi případně uniklo?“'},
+ {id:'closing', emoji:'🏁', title:'Uzavření a další krok',
+  cue:'Domluvím s klientem, co se stane dál, kdo to udělá a do kdy.',
+  exercise:'Klient se dnes nechce rozhodnout. Domluv další krok a termín bez tlaku na rozhodnutí.',
+  example:'„Ve středu vám pošlu shrnutí. Hodí se vám v pátek krátký hovor, abychom prošli vaše otázky?“'}
+];
+const COACHING_AVERAGE = new Intl.NumberFormat('cs-CZ',{minimumFractionDigits:1,maximumFractionDigits:1});
 let csrf = '';
-let store = {contacts:[],activities:[],contracts:[],opportunities:[],referrals:[],recordings:[]};
+let store = {contacts:[],activities:[],contracts:[],opportunities:[],referrals:[],recordings:[],scorecards:[]};
 let view='overview', editingContactId=0, formKind='',formPrefill={};
 let personId=0, coachActivityId=0, recordActivityId=0, wantRecording=false;
+let scorecardActivityId=0;
+let practiceStageId='';
 let recorder=null, recordStream=null, recordChunks=[],recordBlob=null,recordTimer=null,recordStart=0,recordObjectUrl=null;
 let toastTimer=null;
 let activePlaybackUrl=null, activePlaybackActivityId=0, activePlaybackRecordingId=0, activePlaybackExt='webm';
@@ -58,21 +99,118 @@ function go(next){
  view=next;
  document.querySelectorAll('.view').forEach(x=>x.hidden=x.id!==next+'-view');
  document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===next));
- $('crumb').textContent={overview:'Přehled',people:'Lidé',day:'Můj den',results:'Výsledky'}[next]||'Přehled';
+ $('crumb').textContent={overview:'Přehled',people:'Lidé',day:'Můj den',results:'Výsledky',coaching:'Můj trénink'}[next]||'Přehled';
  $('sidebar').classList.remove('open');$('shade').hidden=true;$('hamburger').setAttribute('aria-expanded','false');
  render();window.scrollTo({top:0,behavior:'smooth'});
 }
-function render(){renderOverview();renderPeople();renderDay();renderResults();$('side-count').textContent=store.contacts.length||'';}
+function render(){renderOverview();renderPeople();renderDay();renderResults();if(view==='coaching')renderCoaching();$('side-count').textContent=store.contacts.length||'';}
+function phaseBadge(stage,index){
+ return '<span class="phase-badge" aria-hidden="true">'+(index+1)+' '+stage.emoji+'</span>';
+}
+function renderCoaching(){
+ const cards=new Map((store.scorecards||[]).map(card=>[Number(card.activity_id),card]));
+ const activities=store.activities.filter(a=>COACHABLE_KINDS.includes(a.kind))
+  .sort((a,b)=>String(b.happened_at).localeCompare(String(a.happened_at))||Number(b.id)-Number(a.id));
+ const scored=activities.map(a=>cards.get(Number(a.id))).filter(Boolean);
+ const current=scored.slice(0,3);
+ const previous=scored.slice(3,6);
+ function summary(group,id){
+  const values=group.map(card=>card.scores?.[id]).filter(Number.isInteger);
+  return {count:values.length,average:values.length?values.reduce((sum,value)=>sum+value,0)/values.length:null};
+ }
+ let focus=null;
+ const rows=COACHING_STAGES.map((stage,index)=>{
+  const now=summary(current,stage.id);
+  const before=summary(previous,stage.id);
+  if(now.count && (!focus || now.average<focus.average))focus={stage,average:now.average};
+  const format=stat=>stat.count?COACHING_AVERAGE.format(stat.average)+' / 5 ('+stat.count+')':'—';
+  return '<tr data-phase="'+stage.id+'"><th scope="row">'+phaseBadge(stage,index)+stage.title+'</th><td>'+format(now)+'</td><td>'+format(before)+'</td></tr>';
+ }).join('');
+ $('coaching-progress').innerHTML=scored.length
+  ? '<p class="muted">Hodnocené rozhovory celkem <strong>'+scored.length+'</strong>. Číslo v závorce udává počet hodnocení dané fáze.</p>'+
+    '<table class="coaching-table"><thead><tr><th scope="col">Fáze</th><th scope="col">Poslední 3</th><th scope="col">Předchozí 3</th></tr></thead><tbody>'+rows+'</tbody></table>'
+  : '<p class="muted">Ohodnoť první rozhovor v seznamu níže. Jak budou přibývat další, uvidíš průměry jednotlivých fází i srovnání s předchozími rozhovory.</p>';
+ const practice=scored.find(card=>card.practice)?.practice;
+ const selectedStage=COACHING_STAGES.find(item=>item.id===practiceStageId);
+ const stage=selectedStage||focus?.stage||COACHING_STAGES[0];
+ $('coaching-focus-picker').querySelectorAll('button').forEach(button=>{
+  button.setAttribute('aria-pressed',String(button.dataset.practiceStage===practiceStageId));
+ });
+ $('coaching-focus').dataset.phase=stage.id;
+ $('coaching-focus').innerHTML='<h3>'+phaseBadge(stage,COACHING_STAGES.indexOf(stage))+stage.title+'</h3>'+
+  (!selectedStage&&focus?'<p class="muted">Nejnižší průměr z posledních hodnocených rozhovorů ('+COACHING_AVERAGE.format(focus.average)+' / 5).</p>':'')+
+  '<p>'+stage.exercise+'</p><blockquote>'+stage.example+'</blockquote>'+
+  (practice?'<p class="coaching-practice"><strong>Můj poslední zapsaný krok</strong><br>'+esc(practice)+'</p>':'');
+ $('coaching-activities').innerHTML=activities.slice(0,12).map(a=>{
+  const card=cards.get(Number(a.id));
+  const label=card?'Upravit hodnocení':'Ohodnotit';
+  return '<div class="simple-row coaching-activity"><div class="row-content"><strong>'+esc(fullname(a.contact_id))+
+   '</strong><small>'+esc(KINDS[a.kind])+' · '+when(a.happened_at)+'</small></div>'+
+   '<button class="button outline" data-scorecard="'+Number(a.id)+'">'+label+'</button></div>';
+ }).join('')||'<p class="coaching-body muted">Zatím tu není žádná schůzka ani telefonát. <button class="text-link" data-action="activity">Přidat zápis →</button></p>';
+}
+
+function openScorecard(id){
+ const activity=store.activities.find(a=>Number(a.id)===id);
+ if(!activity||!COACHABLE_KINDS.includes(activity.kind))return;
+ const card=(store.scorecards||[]).find(item=>Number(item.activity_id)===id);
+ scorecardActivityId=id;
+ $('scorecard-context').textContent=fullname(activity.contact_id)+' · '+KINDS[activity.kind]+' · '+when(activity.happened_at);
+ $('scorecard-skills').innerHTML=COACHING_STAGES.map((stage,index)=>
+  '<label data-phase="'+stage.id+'"><span>'+phaseBadge(stage,index)+stage.title+'<small>'+stage.cue+'</small></span><select name="'+stage.id+'">'+
+  '<option value="">Bez skóre</option>'+[1,2,3,4,5].map(value=>
+   '<option value="'+value+'"'+(card?.scores?.[stage.id]===value?' selected':'')+'>'+value+'</option>'
+  ).join('')+'</select></label>'
+ ).join('');
+ $('scorecard-form').elements.practice.value=card?.practice||'';
+ $('scorecard-error').textContent='';
+ openDialog('scorecard-dialog');
+}
+async function saveScorecard(event){
+ event.preventDefault();
+ const form=new FormData(event.currentTarget);
+ const scores=Object.fromEntries(COACHING_STAGES
+  .filter(stage=>form.get(stage.id))
+  .map(stage=>[stage.id,Number(form.get(stage.id))]));
+ const error=$('scorecard-error');
+ if(!Object.keys(scores).length){error.textContent='Ohodnoť alespoň jednu fázi rozhovoru.';return;}
+ const id=scorecardActivityId;
+ $('scorecard-save').disabled=true;
+ error.textContent='';
+ try{
+  await request('coaching_scorecard',{activity_id:id,scores,practice:form.get('practice')});
+  await refresh();
+  if(scorecardActivityId===id)closeDialog('scorecard-dialog');
+  toast('Hodnocení rozhovoru je uložené.');
+ }catch(e){
+  if(scorecardActivityId===id)error.textContent=e.message;
+ }finally{
+  $('scorecard-save').disabled=false;
+ }
+}
 function taskRows(){
  const tasks=[];
- store.activities.forEach(a=>{if(a.next_at)tasks.push({when:a.next_at,label:fullname(a.contact_id),detail:'Další kontakt po: '+(KINDS[a.kind]||'Schůzka'),cid:a.contact_id,icon:'calendar'});});
+ store.activities.forEach(a=>{
+  if(!a.next_at||a.followup_activity_id)return;
+  const plan=FOLLOWUPS[a.next_kind];
+  tasks.push({when:a.next_at,time:a.next_time,label:fullname(a.contact_id),detail:nextActionLabel(a),
+   cid:a.contact_id,icon:plan?.icon||'calendar',activityId:a.id});
+ });
  store.opportunities.forEach(o=>{if(o.next_at&&o.status==='open')tasks.push({when:o.next_at,label:fullname(o.contact_id),detail:'Následný prodej · '+o.product,cid:o.contact_id,icon:'branch'});});
  store.contacts.forEach(c=>{if(c.next_care)tasks.push({when:c.next_care,label:full(c),detail:'Pravidelná péče',cid:c.id,icon:'heart'});});
  store.contracts.forEach(c=>{if(c.expected_at&&c.status!=='cancelled'&&(Number(c.commission_expected)>Number(c.commission_paid)))tasks.push({when:c.expected_at,label:fullname(c.contact_id),detail:'Očekávaná provize '+euros(c.commission_expected),cid:c.contact_id,icon:'coins'});});
- return tasks.sort((a,b)=>a.when.localeCompare(b.when));
+ return tasks.sort((a,b)=>a.when.localeCompare(b.when)||(a.time||'99:99').localeCompare(b.time||'99:99'));
+}
+function nextActionLabel(activity){
+ const label=FOLLOWUPS[activity.next_kind]?.label||'📅 Navázat na rozhovor';
+ return activity.next_note?label+' · '+activity.next_note:label;
 }
 function rowTask(t){
- return '<div class="simple-row"><span class="row-icon">'+icon(t.icon||'calendar')+'</span><div class="row-content"><strong>'+esc(t.label)+'</strong><small>'+esc(t.detail)+'</small></div><span class="row-date">'+when(t.when)+'</span><button data-person="'+Number(t.cid)+'">Otevřít</button></div>';
+ const followup=t.activityId?'<button data-followup="'+Number(t.activityId)+'">Zapsat návaznost</button>':'';
+ return '<div class="simple-row'+(followup?' followup-task':'')+'"><span class="row-icon">'+icon(t.icon||'calendar')+
+  '</span><div class="row-content"><strong>'+esc(t.label)+'</strong><small>'+esc(t.detail)+'</small></div><span class="row-date">'+
+  when(t.when)+(t.time?' · '+esc(t.time):'')+'</span><div class="task-actions">'+followup+
+  '<button data-person="'+Number(t.cid)+'">Otevřít</button></div></div>';
 }
 function noRows(label){return '<div class="empty">'+esc(label)+'</div>';}
 function kpi(label,value,hint,emoji){return '<div class="kpi"><i>'+emoji+'</i><span>'+esc(label)+'</span><strong>'+value+'</strong><small>'+esc(hint)+'</small></div>';}
@@ -109,7 +247,7 @@ function renderDay(){
  const acts=store.activities.slice().sort((a,b)=>b.happened_at.localeCompare(a.happened_at)||b.id-a.id).slice(0,16);
  $('day-entries').innerHTML=acts.length?acts.map(a=>{
   const rec=store.recordings.filter(r=>+r.activity_id===+a.id);
-  return '<div class="simple-row"><span class="row-icon">'+icon(a.kind==='phone'?'phone':'calendar')+'</span><div class="row-content"><strong>'+esc(fullname(a.contact_id))+'</strong><small>'+esc(KINDS[a.kind]||'Zápis')+' · '+when(a.happened_at)+' · '+esc(a.notes||'Bez poznámky')+'</small></div><button data-coach="'+Number(a.id)+'">✨ Trénink</button>'+ (rec.length?'<button data-audio="'+Number(rec[0].id)+'">▶</button>':'<button data-record="'+Number(a.id)+'">🎙️</button>')+'</div>';
+  return '<div class="simple-row"><span class="row-icon">'+icon(a.kind==='phone'?'phone':'calendar')+'</span><div class="row-content"><strong>'+esc(fullname(a.contact_id))+'</strong><small>'+esc(KINDS[a.kind]||'Zápis')+' · '+when(a.happened_at)+' · '+esc(ACTIVITY_RESULTS[a.result_status]||a.outcome||'Bez výsledku')+'</small></div><button data-person="'+Number(a.contact_id)+'">Detail</button><button data-coach="'+Number(a.id)+'">✨ Trénink</button>'+ (rec.length?'<button data-audio="'+Number(rec[0].id)+'">▶</button>':'<button data-record="'+Number(a.id)+'">🎙️</button>')+'</div>';
  }).join(''):noRows('Zatím tu nejsou žádné zápisy. Přidej schůzku a můžeš nahrávat.');
 }
 function renderResults(){
@@ -154,7 +292,16 @@ function person(cid){
  html+='<section class="detail-section"><h3>📝 Schůzky, telefonáty a zápisy ('+acts.length+')</h3>';
  html+=acts.length?acts.map(a=>{
   const rec=recordings.filter(r=>+r.activity_id===+a.id);
-  return '<div class="detail-row"><div><b>'+esc(KINDS[a.kind]||'Poznámka')+' · '+when(a.happened_at)+'</b><small>'+esc(a.notes||'Bez poznámek')+' · '+esc(a.outcome||'')+'</small>'+(a.next_at?'<small>Další krok: '+when(a.next_at)+'</small>':'')+'</div><button data-coach="'+Number(a.id)+'">✨ AI trénink</button>'+(rec.length?'<button data-audio="'+Number(rec[0].id)+'" data-activity="'+Number(a.id)+'">▶ Audio</button>':'<button data-record="'+Number(a.id)+'">🎙️ Nahrát</button>')+'</div>';
+  const sections=[['👋 Otevření',a.opening],['💬 Průběh',a.notes],['🔎 Zjištění',a.findings],['🪞 Shrnutí',a.summary],['🏁 Závěr',a.outcome]]
+   .filter(([,value])=>value).map(([label,value])=>'<dt>'+label+'</dt><dd>'+esc(value)+'</dd>').join('');
+  const next=a.next_at?'<small>'+esc(nextActionLabel(a))+' · '+when(a.next_at)+(a.next_time?' '+esc(a.next_time):'')+
+   (a.followup_activity_id?' · ✅ Zapsáno':'')+'</small>':'';
+  return '<div class="detail-row"><div><b>'+esc(KINDS[a.kind]||'Poznámka')+' · '+when(a.happened_at)+'</b>'+
+   (a.result_status?'<small>'+esc(ACTIVITY_RESULTS[a.result_status]||'')+'</small>':'')+
+   (sections?'<details class="activity-notes"><summary>Průběh a závěr</summary><dl>'+sections+'</dl></details>':'')+next+
+   (a.next_at&&!a.followup_activity_id?'<button data-followup="'+Number(a.id)+'">Zapsat návaznost</button>':'')+
+   '</div><button data-coach="'+Number(a.id)+'">✨ AI trénink</button>'+
+   (rec.length?'<button data-audio="'+Number(rec[0].id)+'" data-activity="'+Number(a.id)+'">▶ Audio</button>':'<button data-record="'+Number(a.id)+'">🎙️ Nahrát</button>')+'</div>';
  }).join(''):noRows('Zatím žádná schůzka.');
  html+='</section><section class="detail-section"><h3>✍️ Smlouvy a provize ('+contracts.length+')</h3>';
  html+=contracts.length?contracts.map(x=>'<div class="detail-row"><div><b>'+esc(x.product)+'</b><small>Objem '+euros(x.value)+' · očekáváno '+euros(x.commission_expected)+' ('+when(x.expected_at)+')</small><small>Vyplaceno '+euros(x.commission_paid)+' ('+when(x.paid_at)+') · '+esc(x.status)+'</small></div></div>').join(''):noRows('Zatím bez smlouvy.');
@@ -180,6 +327,11 @@ function textArea(label,name,value='',placeholder=''){
 function selectField(label,name,options){
  return '<label>'+esc(label)+'<select name="'+esc(name)+'">'+options+'</select></label>';
 }
+function openFollowup(id){
+ const activity=store.activities.find(a=>Number(a.id)===id);
+ if(!activity||!activity.next_at||activity.followup_activity_id)return;
+ openForm('activity',Number(activity.contact_id),{kind:FOLLOWUPS[activity.next_kind]?.kind||'phone',followup:activity});
+}
 function openForm(kind,cid=0,extra={}){
  if(kind!=='contact'&&kind!=='edit'&&!store.contacts.length){toast('Nejdřív přidej prvního člověka. 🙂');kind='contact';}
  if($('person-dialog').open)$('person-dialog').close();
@@ -196,15 +348,30 @@ function openForm(kind,cid=0,extra={}){
   textArea('Poznámky','notes',c?.notes||'')+
   '<div class="row-fields">'+selectField('Pravidelná péče','care_months',[1,3,6,12].map(n=>'<option value="'+n+'" '+(Number(c?.care_months||3)===n?'selected':'')+'>Každé '+n+' měs.</option>').join(''))+field('Další péče','next_care',c?.next_care||'','date')+'</div>';
  }else if(kind==='activity'||kind==='care'){
-  title=kind==='care'?'Péče o klienta 💚':'Nový zápis ze schůzky 🎙️';
+  title=extra.followup?'Navazující aktivita 🔁':kind==='care'?'Péče o klienta 💚':'Nový zápis z rozhovoru 🎙️';
   const selected=cid||0;
   const wanted=kind==='care'?'care':(extra.kind||'meeting1');
-  html=selectField('👤 Člověk *','contact_id',contactOptions(selected))+
+  html=(extra.followup?
+   '<input type="hidden" name="contact_id" value="'+Number(cid)+'"><input type="hidden" name="followup_from_id" value="'+Number(extra.followup.id)+'">'+
+   '<div class="notice">🔁 '+esc(fullname(cid))+' · '+esc(nextActionLabel(extra.followup))+'</div>':
+   selectField('👤 Člověk *','contact_id',contactOptions(selected)))+
   selectField('Co právě proběhlo?','kind',Object.entries(KINDS).map(([v,n])=>'<option value="'+v+'" '+(wanted===v?'selected':'')+'>'+esc(n)+'</option>').join(''))+
   field('Datum','happened_at',TODAY(),'date',true)+
-  textArea('1. Co jste probírali?','notes','','Hlavní téma, přání klienta, otázky…')+
-  field('2. Jak to dopadlo?','outcome','','text',false,'placeholder="Např. domluven návrh / zájem / odmítnuto"')+
-  field('3. Kdy je další krok?','next_at','','date')+
+  '<fieldset class="activity-block"><legend>📝 Průběh rozhovoru</legend>'+
+  '<div class="row-fields">'+textArea('👋 Otevření','opening','','Jak jsem navázal kontakt a domluvil účel?')+
+  textArea('💬 Průběh','notes','','Hlavní téma, otázky a reakce klienta…')+'</div>'+
+  '<div class="row-fields">'+textArea('🔎 Zjištění','findings','','Co jsem zjistil o potřebách, prioritách nebo překážkách?')+
+  textArea('🪞 Shrnutí','summary','','Co jsme si ověřili a na čem se shodujeme?')+'</div>'+
+  '<div class="row-fields">'+field('🏁 Závěr','outcome','','text',false,'maxlength="500" placeholder="Např. klient chce vidět návrh"')+
+  selectField('Výsledek','result_status','<option value="">Bez hodnocení</option>'+Object.entries(ACTIVITY_RESULTS)
+   .map(([v,label])=>'<option value="'+v+'">'+label+'</option>').join(''))+'</div></fieldset>'+
+  '<fieldset class="activity-block activity-plan"><legend>🎯 Domluvený další krok</legend>'+
+  selectField('Co udělám?','next_kind','<option value="">Nevybráno</option>'+Object.entries(FOLLOWUPS)
+   .map(([v,plan])=>'<option value="'+v+'">'+plan.label+'</option>').join(''))+
+  field('Co přesně připravím nebo nabídnu?','next_note','','text',false,'maxlength="1000" placeholder="Např. poslat srovnání, probrat péči nebo se zeptat na doporučení"')+
+  '<div class="row-fields">'+field('📅 Datum dalšího kroku','next_at','','date')+
+  field('🕒 Čas (volitelný)','next_time','','time')+'</div>'+
+  '<p class="muted">Jakmile zadáš datum, krok se objeví v agendě Můj den.</p></fieldset>'+
   '<div class="notice">🎙️ Po uložení můžeš přidat nahrávku schůzky. V telefonu přímo v prohlížeči lze nahrávat mikrofon; telefonní hovory nahrané jinde lze přiložit jako soubor.</div>';
  }else if(kind==='contract'){
   title='Nová smlouva ✍️';
@@ -435,6 +602,7 @@ function openCoach(id){
  const a=store.activities.find(x=>+x.id===+id);
  if(!a)return toast('Zápis nenalezen.',true);
  coachActivityId=+id;$('coach-transcript').value=a.transcript||'';$('coach-review').value=a.review||'';$('coach-error').textContent='';$('coach-generated').hidden=true;$('coach-ready-prompt').value='';
+ $('coach-scorecard').hidden=!COACHABLE_KINDS.includes(a.kind);
  if($('person-dialog').open)$('person-dialog').close();
  if($('playback-dialog').open)$('playback-dialog').close();
  openDialog('coach-dialog');
@@ -453,7 +621,7 @@ async function copyCoach(){
   '1. Stručně shrň cíl, potřeby klienta, výsledek a domluvený další krok (pokud zazněly).',
   '2. Co se povedlo: konkrétní příklady z přepisu.',
   '3. Co příště zlepšit: maximálně 3 jasné praktické rady a vhodnější formulace.',
-  '4. Posuď aktivní naslouchání, zjišťování potřeb, srozumitelnost a férovost. Skóre 0–10 uveď jen tam, kde máš dostatek podkladů.',
+  '4. Posuď těchto šest fází: '+COACHING_STAGES.map(stage=>stage.title).join('; ')+'. Uveď konkrétní příklad a skóre 1–5 jen tam, kde máš dostatek podkladů.',
   '5. Připrav krátký trénink rolí: 3 otázky klienta, na které mám odpovědět, a po mé odpovědi mi dej zpětnou vazbu.',
   '6. Navrhni citlivou formulaci následné péče nebo žádosti o doporučení bez nátlaku.',
   'Jde-li o investice či pojištění, neposuzuj vhodnost konkrétního produktu bez úplného zjištění situace klienta.',
@@ -551,6 +719,8 @@ document.addEventListener('click',event=>{
   return;
  }
  if(target.dataset.record){openAudio(Number(target.dataset.record));return;}
+ if(target.dataset.followup){openFollowup(Number(target.dataset.followup));return;}
+ if(target.dataset.scorecard){openScorecard(Number(target.dataset.scorecard));return;}
  if(target.dataset.coach){openCoach(Number(target.dataset.coach));return;}
  if(target.dataset.audio){
   openPlayback(Number(target.dataset.audio),Number(target.dataset.activity));
@@ -622,6 +792,18 @@ $('stop-record').addEventListener('click',stopRecording);
 $('audio-file').addEventListener('change',()=>{$('save-audio').disabled=!$('audio-file').files.length;});
 $('save-audio').addEventListener('click',saveAudio);
 $('coach-save').addEventListener('click',saveCoach);
+$('coach-scorecard').addEventListener('click',()=>openScorecard(coachActivityId));
+$('scorecard-form').addEventListener('submit',saveScorecard);
+const practicePicker=$('coaching-focus-picker');
+practicePicker.innerHTML='<button type="button" data-practice-stage="" aria-pressed="true">✨ Doporučeno</button>'+
+ COACHING_STAGES.map((stage,index)=>'<button type="button" data-phase="'+stage.id+'" data-practice-stage="'+stage.id+
+  '" aria-label="'+stage.title+'" aria-pressed="false">'+(index+1)+' '+stage.emoji+'</button>').join('');
+practicePicker.addEventListener('click',event=>{
+ const button=event.target.closest('button[data-practice-stage]');
+ if(!button)return;
+ practiceStageId=button.dataset.practiceStage;
+ renderCoaching();
+});
 $('coach-copy').addEventListener('click',copyCoach);
 $('coach-open-chatgpt').addEventListener('click',()=>window.open('https://chatgpt.com/','_blank','noopener,noreferrer'));
 $('playback-download').addEventListener('click',downloadPlayback);

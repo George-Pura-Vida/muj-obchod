@@ -12,7 +12,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261107jj2">
 <meta name="application-name" content="Moje schůzka">
 <meta name="apple-mobile-web-app-title" content="Moje schůzka">
-<link rel="stylesheet" href="style.css?v=20261107a">
+<link rel="stylesheet" href="style.css?v=20261107-coaching1">
 </head>
 <body>
 <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -52,6 +52,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <button class="nav-item" data-view="people"><svg><use href="#i-users"/></svg> Lidé <span id="side-count"></span></button>
 <button class="nav-item" data-view="day"><svg><use href="#i-calendar"/></svg> Můj den</button>
 <button class="nav-item" data-view="results"><svg><use href="#i-chart"/></svg> Výsledky</button>
+<button class="nav-item" data-view="coaching"><svg><use href="#i-check"/></svg> Můj trénink</button>
 </nav>
 <div class="side-bottom"><div class="motivation">Malé kroky.<br><strong>Velké vztahy.</strong><span>✦</span></div><button class="subtle-action" id="import-action"><svg><use href="#i-upload"/></svg> Import kontaktů</button><button class="subtle-action" id="export-action"><svg><use href="#i-download"/></svg> Export Excel / CSV</button><button class="subtle-action" id="backup-action"><svg><use href="#i-download"/></svg> Záloha zápisů JSON</button><div class="side-profile"><div class="avatar">JJ</div><div><strong>Jiří Janoušek</strong><small>Osobní účet</small></div><button id="logout" title="Odhlásit se">↪</button></div></div></aside>
 <div class="main-wrap"><header class="topbar"><button class="hamburger" id="hamburger" aria-label="Otevřít nabídku" aria-expanded="false"><svg><use href="#i-menu"/></svg></button><div class="top-brand-mobile">moje <b>schůzka</b></div><div class="top-breadcrumb">PRACOVNÍ PROSTOR <span>/</span> <strong id="crumb">Přehled</strong></div><div class="header-right"><span class="date" id="date-now"></span><span class="avatar avatar-small">JJ</span></div></header>
@@ -74,6 +75,20 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <section class="view" id="people-view" hidden><div class="page-heading"><div><span class="eyebrow">TVOJE KONTAKTY A KLIENTI</span><h1>Lidé a vztahy</h1><p>Všechno důležité o člověku na jedné kartě.</p></div><button class="button primary" data-action="contact"><svg><use href="#i-plus"/></svg> Nový člověk</button></div><div class="filter-bar"><label class="searchbox"><svg><use href="#i-search"/></svg><input id="people-search" placeholder="Jméno, telefon, e-mail…"></label><select id="people-stage"><option value="">Všechny fáze</option><option value="contact">Kontakt</option><option value="phone">Telefon</option><option value="meeting1">1. schůzka</option><option value="meeting2">Další schůzky</option><option value="contract">Smlouva</option><option value="care">Péče</option></select></div><div id="people-list" class="people-list"></div></section>
 <section class="view" id="day-view" hidden><div class="page-heading"><div><span class="eyebrow">PŘEHLED BEZ STRESU</span><h1>Můj den</h1><p>Co mám udělat dnes a co mě čeká dál?</p></div><button class="button primary" data-action="activity"><svg><use href="#i-plus"/></svg> Nový zápis</button></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>📅 Naplánované kroky</h2></div><div id="day-tasks"></div></article><article class="panel"><div class="panel-head"><h2>🎙️ Poslední zápisy a nahrávky</h2></div><div id="day-entries"></div></article></div></section>
 <section class="view" id="results-view" hidden><div class="page-heading"><div><span class="eyebrow">KAŽDÝ KROK MÁ SMYSL</span><h1>Moje výsledky</h1><p>Čísla, která dávají smysl. Bez složitého CRM.</p></div><button class="button outline" id="export-results"><svg><use href="#i-download"/></svg> Exportovat data</button></div><div id="results-kpis" class="kpi-grid"></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>Jak se daří obchodu</h2></div><div id="funnel"></div></article><article class="panel"><div class="panel-head"><h2>Provize podle stavu</h2></div><div id="commissions"></div></article></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>📈 Vývoj schůzek a smluv</h2></div><div id="trend-chart"></div></article><article class="panel"><div class="panel-head"><h2>🌱 Křížový prodej</h2><button class="text-link" data-action="opportunity">Přidat →</button></div><div id="crosssell-list"></div></article></div><article class="panel" style="margin-top:18px"><div class="panel-head"><h2>💰 Kdy přijde provize</h2></div><div id="commission-list"></div></article></section>
+<section class="view" id="coaching-view" hidden>
+  <div class="page-heading"><div><span class="eyebrow">ROZVOJ OBCHODNÍCH DOVEDNOSTÍ</span><h1>Můj trénink</h1><p>Zhodnoť rozhovor, vyber jeden krok ke zlepšení a vyzkoušej ho příště.</p></div></div>
+  <div class="two-col">
+    <article class="panel"><div class="panel-head"><h2>📈 Pokrok podle dovednosti</h2></div><div class="coaching-body" id="coaching-progress"></div></article>
+    <article class="panel warm">
+      <div class="panel-head"><h2>🎯 Co si nacvičit</h2></div>
+      <div class="coaching-body">
+        <div class="practice-picker" id="coaching-focus-picker" role="group" aria-label="Fáze k nácviku"></div>
+        <div class="practice-card" id="coaching-focus" aria-live="polite"></div>
+      </div>
+    </article>
+  </div>
+  <article class="panel coaching-history"><div class="panel-head"><h2>Poslední schůzky a telefonáty</h2></div><div id="coaching-activities"></div></article>
+</section>
 <footer class="site-footer"><strong>moje schůzka</strong> · Jiří Janoušek <span>Soukromá evidence. Záznamy pořizujte jen oprávněně.</span><a href="https://jirijanousek.cz/" target="_blank" rel="noopener">jirijanousek.cz ↗</a></footer>
 </main>
 </div></div>
@@ -94,9 +109,22 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <p class="error" id="playback-error" role="alert"></p>
 </div>
 </dialog>
-<dialog id="coach-dialog" class="modal"><div class="modal-top"><div><span class="eyebrow">UČÍM SE Z KAŽDÉ SCHŮZKY</span><h2>Trénink a vyhodnocení ✨</h2></div><button class="x-button" data-close="coach-dialog" aria-label="Zavřít"><svg><use href="#i-close"/></svg></button></div><div class="modal-body"><p class="muted">Z nahrávky se zatím automaticky netvoří přepis ani AI analýza. Vlož sem anonymizovaný přepis nebo nejdůležitější věty ze schůzky. Pak klikni na Připravit pro AI kouče a vlož zkopírovaný text do ChatGPT.</p><label>Přepis / důležité věty<textarea id="coach-transcript" rows="7" placeholder="Co řekl klient, jak jsem reagoval, co jsme dohodli…"></textarea></label><label>Moje vlastní hodnocení<textarea id="coach-review" rows="3" placeholder="Co se povedlo a co příště zlepším?"></textarea></label><div class="record-buttons"><button class="button outline" id="coach-save">Uložit poznámky</button><button class="button primary" id="coach-copy">✨ Připravit pro AI kouče</button><button class="button outline" id="coach-open-chatgpt" type="button">Otevřít ChatGPT ↗</button></div><label id="coach-generated" hidden>Text pro ChatGPT – zkontroluj anonymizaci a zkopíruj jej<textarea id="coach-ready-prompt" rows="8" readonly></textarea></label><p class="tiny-warning">Před kopírováním do externí AI odstraň jména, kontakty, citlivé a důvěrné informace; dodrž účel zpracování a oprávnění účastníků.</p><p class="error" id="coach-error"></p></div></dialog>
+<dialog id="coach-dialog" class="modal"><div class="modal-top"><div><span class="eyebrow">UČÍM SE Z KAŽDÉ SCHŮZKY</span><h2>Trénink a vyhodnocení ✨</h2></div><button class="x-button" data-close="coach-dialog" aria-label="Zavřít"><svg><use href="#i-close"/></svg></button></div><div class="modal-body"><p class="muted">Z nahrávky se zatím automaticky netvoří přepis ani AI analýza. Vlož sem anonymizovaný přepis nebo nejdůležitější věty ze schůzky. Pak klikni na Připravit pro AI kouče a vlož zkopírovaný text do ChatGPT.</p><label>Přepis / důležité věty<textarea id="coach-transcript" rows="7" placeholder="Co řekl klient, jak jsem reagoval, co jsme dohodli…"></textarea></label><label>Moje vlastní hodnocení<textarea id="coach-review" rows="3" placeholder="Co se povedlo a co příště zlepším?"></textarea></label><div class="record-buttons"><button class="button outline" id="coach-scorecard" type="button">Ohodnotit dovednosti</button><button class="button outline" id="coach-save">Uložit poznámky</button><button class="button primary" id="coach-copy">✨ Připravit pro AI kouče</button><button class="button outline" id="coach-open-chatgpt" type="button">Otevřít ChatGPT ↗</button></div><label id="coach-generated" hidden>Text pro ChatGPT – zkontroluj anonymizaci a zkopíruj jej<textarea id="coach-ready-prompt" rows="8" readonly></textarea></label><p class="tiny-warning">Před kopírováním do externí AI odstraň jména, kontakty, citlivé a důvěrné informace; dodrž účel zpracování a oprávnění účastníků.</p><p class="error" id="coach-error"></p></div></dialog>
+<dialog id="scorecard-dialog" class="modal" aria-labelledby="scorecard-title">
+  <div class="modal-top"><div><span class="eyebrow">SEBEHODNOCENÍ ROZHOVORU</span><h2 id="scorecard-title">Hodnocení schůzky</h2></div><button class="x-button" data-close="scorecard-dialog" aria-label="Zavřít"><svg><use href="#i-close"/></svg></button></div>
+  <form id="scorecard-form">
+    <div class="modal-body">
+      <p class="muted" id="scorecard-context"></p>
+      <p class="muted">1 = chybělo, 3 = částečně, 5 = zvládnuto dobře. Co nemůžeš posoudit, ponech bez skóre.</p>
+      <div id="scorecard-skills" class="scorecard-skills"></div>
+      <label>Co si vyzkouším v příštím rozhovoru?<textarea name="practice" rows="2" maxlength="500" placeholder="Např. na konci společně potvrdím termín a kdo udělá další krok."></textarea></label>
+      <p class="error" id="scorecard-error" role="alert"></p>
+    </div>
+    <div class="modal-footer"><button class="button outline" type="button" data-close="scorecard-dialog">Zrušit</button><button class="button primary" id="scorecard-save" type="submit">Uložit hodnocení</button></div>
+  </form>
+</dialog>
 <input id="import-file" type="file" accept=".csv,.xlsx,.xls" hidden>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="xlsx.full.min.js?v=1" defer></script>
-<script src="app.js?v=20261107-audio7" defer></script>
+<script src="app.js?v=20261107-coaching1" defer></script>
 </body></html>

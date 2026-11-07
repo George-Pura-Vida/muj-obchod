@@ -66,6 +66,22 @@ CREATE TABLE IF NOT EXISTS contracts (id INTEGER PRIMARY KEY AUTOINCREMENT, user
 CREATE TABLE IF NOT EXISTS opportunities (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, contact_id INTEGER NOT NULL, product TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'crosssell', status TEXT NOT NULL DEFAULT 'open', potential REAL DEFAULT 0, expected_commission REAL DEFAULT 0, next_at TEXT, notes TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(contact_id) REFERENCES contacts(id) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS referrals (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, contact_id INTEGER NOT NULL, name TEXT NOT NULL, phone TEXT DEFAULT '', permission INTEGER NOT NULL DEFAULT 0, notes TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(contact_id) REFERENCES contacts(id) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS recordings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, activity_id INTEGER NOT NULL, filename TEXT NOT NULL, original_name TEXT NOT NULL, mime TEXT NOT NULL, bytes INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(activity_id) REFERENCES activities(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS coaching_scorecards (
+    activity_id INTEGER PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
+    scores TEXT NOT NULL,
+    practice TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS activity_details (
+    activity_id INTEGER PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
+    opening TEXT NOT NULL DEFAULT '',
+    findings TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    result_status TEXT NOT NULL DEFAULT '',
+    next_kind TEXT NOT NULL DEFAULT '',
+    next_time TEXT NOT NULL DEFAULT '',
+    next_note TEXT NOT NULL DEFAULT '',
+    followup_activity_id INTEGER REFERENCES activities(id) ON DELETE SET NULL
+);
 CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
 CREATE INDEX IF NOT EXISTS idx_activities_contact ON activities(contact_id,user_id);
 CREATE INDEX IF NOT EXISTS idx_contracts_contact ON contracts(contact_id,user_id);
@@ -128,17 +144,72 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
             $kind=val($data,'kind',30);
             if(!in_array($kind,['phone','meeting1','meeting2','meeting','email','care','note'],true))fail('Neplatný typ zápisu.');
             $notes=val($data,'notes',20000);
-            $at=val($data,'happened_at',35)?:date('Y-m-d');
-            if(!preg_match('/^\d{4}-\d{2}-\d{2}$/',$at))fail('Neplatné datum schůzky.');
-            $db->prepare('INSERT INTO activities(user_id,contact_id,kind,happened_at,notes,outcome,next_at,transcript,review) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$uid,$cid,$kind,$at,$notes,val($data,'outcome',500),dateValue($data,'next_at'),val($data,'transcript',120000),val($data,'review',20000)]);
+            $at=dateValue($data,'happened_at')??date('Y-m-d');
+            $nextAt=dateValue($data,'next_at');
+            $nextKind=val($data,'next_kind',30);
+            $nextTime=val($data,'next_time',30);
+            $nextNote=val($data,'next_note',1000);
+            $status=val($data,'result_status',30);
+            if(!in_array($status,['','success','open','declined'],true))fail('Neplatný výsledek aktivity.');
+            if(!in_array($nextKind,['','phone','meeting','email','care','crosssell','referral','cooperation','recruitment'],true))fail('Neplatný typ dalšího kroku.');
+            if($nextTime!==''&&!preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D',$nextTime))fail('Neplatný čas dalšího kroku.');
+            if(!$nextAt&&($nextKind!==''||$nextTime!==''||$nextNote!==''))fail('K dalšímu kroku doplň datum.');
+            $from=$data['followup_from_id']??null;
+            if($from!==null && !($from=filter_var($from,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]])))fail('Neplatný odkaz na předchozí aktivitu.');
+            $db->beginTransaction();
+            $db->prepare('INSERT INTO activities(user_id,contact_id,kind,happened_at,notes,outcome,next_at,transcript,review) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$uid,$cid,$kind,$at,$notes,val($data,'outcome',500),$nextAt,val($data,'transcript',120000),val($data,'review',20000)]);
             $id=(int)$db->lastInsertId();
+            $db->prepare('INSERT INTO activity_details(activity_id,opening,findings,summary,result_status,next_kind,next_time,next_note) VALUES(?,?,?,?,?,?,?,?)')
+                ->execute([$id,val($data,'opening',3000),val($data,'findings',10000),val($data,'summary',5000),$status,$nextKind,$nextTime,$nextNote]);
+            if($from!==null){
+                $q=$db->prepare('INSERT INTO activity_details(activity_id,followup_activity_id)
+                    SELECT id,? FROM activities WHERE id=? AND id<>? AND user_id=? AND contact_id=? AND next_at IS NOT NULL AND next_at<>\'\'
+                    ON CONFLICT(activity_id) DO UPDATE SET followup_activity_id=excluded.followup_activity_id
+                    WHERE activity_details.followup_activity_id IS NULL');
+                $q->execute([$id,$from,$id,$uid,$cid]);
+                if(!$q->rowCount()){
+                    $db->rollBack();
+                    fail('Předchozí úkol je už hotový nebo ho nelze najít. Obnov přehled.',409);
+                }
+            }
             $step=['phone'=>'phone','meeting1'=>'meeting1','meeting2'=>'meeting2','meeting'=>'meeting2','care'=>'care'];
-            if(isset($step[$kind]))setStage($db,$uid,$cid,$step[$kind]);
+            if(isset($step[$kind])){
+                $advance=true;
+                if($from!==null){
+                    $order=['contact','phone','meeting1','meeting2','contract','care'];
+                    $q=$db->prepare('SELECT stage FROM contacts WHERE id=? AND user_id=?');
+                    $q->execute([$cid,$uid]);
+                    $advance=array_search($step[$kind],$order,true)>array_search($q->fetchColumn(),$order,true);
+                }
+                if($advance)setStage($db,$uid,$cid,$step[$kind]);
+            }
+            $db->commit();
             reply(['ok'=>true,'id'=>$id]);
         }
         if($action==='review'){
             $id=(int)($data['id']??0);if(!existsOwner($db,'activities',$id,$uid))fail('Zápis nenalezen.',404);
             $db->prepare('UPDATE activities SET transcript=?,review=? WHERE id=? AND user_id=?')->execute([val($data,'transcript',120000),val($data,'review',20000),$id,$uid]);reply(['ok'=>true]);
+        }
+        if($action==='coaching_scorecard'){
+            $id=filter_var($data['activity_id']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
+            $input=$data['scores']??null;
+            $skills=['opening','open_questions','narrowing','closed_questions','verification','closing'];
+            if(!$id || !is_array($input) || array_diff(array_keys($input),$skills) || !is_string($data['practice']??'')){
+                fail('Neplatné hodnocení schůzky.');
+            }
+            $scores=[];
+            foreach($input as $skill=>$score){
+                if(!is_int($score) || $score<1 || $score>5)fail('Skóre musí být celé číslo od 1 do 5.');
+                $scores[$skill]=$score;
+            }
+            if(!$scores)fail('Ohodnoť alespoň jednu dovednost.');
+            $q=$db->prepare("INSERT INTO coaching_scorecards(activity_id,scores,practice)
+                SELECT id,?,? FROM activities
+                WHERE id=? AND user_id=? AND kind IN ('phone','meeting1','meeting2','meeting')
+                ON CONFLICT(activity_id) DO UPDATE SET scores=excluded.scores,practice=excluded.practice");
+            $q->execute([json_encode($scores,JSON_THROW_ON_ERROR),val($data,'practice',500),$id,$uid]);
+            if(!$q->rowCount())fail('Schůzka ani telefonát nebyly nalezeny.',404);
+            reply(['ok'=>true]);
         }
         if($action==='contract'){
             $cid=(int)($data['contact_id']??0);belongs($db,$uid,$cid);
@@ -190,9 +261,18 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
     if($action==='state'||$action==='backup'){
         $data=[];
         foreach(['contacts','activities','contracts','opportunities','referrals','recordings'] as $table){
-            $q=$db->prepare("SELECT * FROM $table WHERE user_id=? ORDER BY id DESC");$q->execute([$uid]);$data[$table]=$q->fetchAll();
+            $sql=$table==='activities'
+                ? 'SELECT a.*,d.opening,d.findings,d.summary,d.result_status,d.next_kind,d.next_time,d.next_note,d.followup_activity_id
+                   FROM activities a LEFT JOIN activity_details d ON d.activity_id=a.id WHERE a.user_id=? ORDER BY a.id DESC'
+                : "SELECT * FROM $table WHERE user_id=? ORDER BY id DESC";
+            $q=$db->prepare($sql);$q->execute([$uid]);$data[$table]=$q->fetchAll();
         }
         foreach($data['recordings'] as &$record)unset($record['filename']);unset($record);
+        $q=$db->prepare('SELECT s.activity_id,s.scores,s.practice FROM coaching_scorecards s JOIN activities a ON a.id=s.activity_id WHERE a.user_id=?');
+        $q->execute([$uid]);
+        $data['scorecards']=$q->fetchAll();
+        foreach($data['scorecards'] as &$card)$card['scores']=json_decode($card['scores'],true);
+        unset($card);
         reply(['ok'=>true,'data'=>$data]);
     }
     // JSON fallback for hosting layers that replace binary PHP responses with HTML.
