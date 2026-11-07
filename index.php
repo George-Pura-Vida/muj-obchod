@@ -98,5 +98,5 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <input id="import-file" type="file" accept=".csv,.xlsx,.xls" hidden>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="xlsx.full.min.js?v=1" defer></script>
-<script src="app.js?v=20261107-audio3" defer></script>
+<script src="app.js?v=20261107-audio4" defer></script>
 </body></html>
