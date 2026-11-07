@@ -9,6 +9,9 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <meta name="theme-color" content="#103e37"><meta name="robots" content="noindex,nofollow">
 <title>Moje schůzka · Jiří Janoušek</title>
 <meta name="description" content="Od prvního kontaktu k dlouhodobému vztahu.">
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261107jj2">
+<meta name="application-name" content="Moje schůzka">
+<meta name="apple-mobile-web-app-title" content="Moje schůzka">
 <link rel="stylesheet" href="style.css?v=20261107a">
 </head>
 <body>
