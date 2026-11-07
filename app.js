@@ -91,25 +91,34 @@ async function start(){
     $('auth-submit').innerHTML=meta.setup_required?'Vytvořit můj účet '+icon('arrow'):'Přihlásit se '+icon('arrow');
     $('auth-description').textContent=meta.setup_required?'Vytvoř si soukromý účet na svém WebKitty.':'Tvůj soukromý obchodní prostor.';
     $('auth-help').textContent=meta.setup_required?(meta.setup_available?'Zadej instalační klíč z privátní konfigurace na hostingu.':'Nejprve nastav instalační klíč ve config.local.php (viz README).'):'Účet je přístupný pouze oprávněnému správci.';
-  }else await signedIn();
+  }else await signedIn(meta);
  }catch(e){$('boot').textContent=e.message;$('boot').style.color='#b64742';return;}
  $('boot').hidden=true;
 }
-async function signedIn(){
+async function signedIn(meta){
+ const account=meta||await request('meta');
+ csrf=account.csrf;
  await refresh();
+ $('settings-email').value=account.email||'';
+ applyUserPreferences();
  $('auth').hidden=true;$('app').hidden=false;
  $('date-now').textContent=new Date().toLocaleDateString('cs-CZ',{weekday:'long',day:'numeric',month:'long'});
  go('overview');
 }
 async function refresh(){const res=await request('state');store=res.data;render();}
 function go(next){
+ const enteringSettings=next==='settings'&&view!=='settings';
+ if(enteringSettings)beginUserSettings(view);
  view=next;
+ $('app').classList.toggle('is-settings',next==='settings');
  document.querySelectorAll('.view').forEach(x=>x.hidden=x.id!==next+'-view');
  document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===next));
  document.querySelectorAll('#side-nav [data-view]').forEach(x=>x.dataset.view===next?x.setAttribute('aria-current','page'):x.removeAttribute('aria-current'));
  $('crumb').textContent={overview:'Přehled',people:'Lidé',day:'Můj den',care:'Péče a doporučení',results:'Výsledky',coaching:'Můj trénink',team:'Tým a spolupráce'}[next]||'Přehled';
  $('sidebar').classList.remove('open');$('shade').hidden=true;$('hamburger').setAttribute('aria-expanded','false');
- render();window.scrollTo({top:0,behavior:'smooth'});
+ if(next!=='settings')render();
+ if(enteringSettings)$('settings-menu-panel').querySelector('h1').focus();
+ window.scrollTo({top:0,behavior:next==='settings'?'instant':'smooth'});
 }
 function render(){
  renderOverview();renderPeople();renderDay();renderResults();
@@ -991,6 +1000,7 @@ $('coach-scorecard').addEventListener('click',()=>openScorecard(coachActivityId)
 $('scorecard-form').addEventListener('submit',saveScorecard);
 $('relationship-period').addEventListener('change',renderRelationshipMetrics);
 installScenarioPractice();
+installUserSettings();
 const practicePicker=$('coaching-focus-picker');
 practicePicker.innerHTML='<button type="button" data-practice-stage="" aria-pressed="true">✨ Doporučeno</button>'+
  COACHING_STAGES.map((stage,index)=>'<button type="button" data-phase="'+stage.id+'" data-practice-stage="'+stage.id+

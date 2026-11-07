@@ -12,7 +12,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261107jj2">
 <meta name="application-name" content="Moje schůzka">
 <meta name="apple-mobile-web-app-title" content="Moje schůzka">
-<link rel="stylesheet" href="style.css?v=20261107-pro1">
+<link rel="stylesheet" href="style.css?v=20261107-settings1">
 </head>
 <body>
 <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -25,6 +25,8 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <symbol id="i-coins" viewBox="0 0 24 24"><circle cx="12" cy="6" r="4"/><path d="M2 12c0 2 4 4 10 4s10-2 10-4M2 12v5c0 2 4 4 10 4s10-2 10-4v-5"/></symbol>
 <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 21V4m0 17h17"/><path d="M7 16l4-5 4 3 6-8"/></symbol>
 <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5m-4 0h8"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.5" fill="currentColor"/><circle cx="15" cy="17" r="2.5" fill="currentColor"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="6" y="10" width="12" height="10" rx="2"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/></symbol>
 <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
 <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-7-7 7 7-7 7"/></symbol>
@@ -56,8 +58,8 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <button class="nav-item" data-view="coaching"><svg><use href="#i-check"/></svg> Můj trénink</button>
 <button class="nav-item" data-view="team"><svg><use href="#i-branch"/></svg> Tým a spolupráce</button>
 </nav>
-<div class="side-bottom"><div class="motivation">Malé kroky.<br><strong>Velké vztahy.</strong><span>✦</span></div><button class="subtle-action" id="import-action"><svg><use href="#i-upload"/></svg> Import kontaktů</button><button class="subtle-action" id="export-action"><svg><use href="#i-download"/></svg> Export Excel / CSV</button><button class="subtle-action" id="backup-action"><svg><use href="#i-download"/></svg> Záloha zápisů JSON</button><div class="side-profile"><div class="avatar">JJ</div><div><strong>Jiří Janoušek</strong><small>Osobní účet</small></div><button id="logout" title="Odhlásit se">↪</button></div></div></aside>
-<div class="main-wrap"><header class="topbar"><button class="hamburger" id="hamburger" aria-label="Otevřít nabídku" aria-expanded="false"><svg><use href="#i-menu"/></svg></button><div class="top-brand-mobile">moje <b>schůzka</b></div><div class="top-breadcrumb">PRACOVNÍ PROSTOR <span>/</span> <strong id="crumb">Přehled</strong></div><div class="header-right"><span class="date" id="date-now"></span><span class="avatar avatar-small">JJ</span></div></header>
+<div class="side-bottom"><div class="motivation">Malé kroky.<br><strong>Velké vztahy.</strong><span>✦</span></div><button class="subtle-action" id="import-action"><svg><use href="#i-upload"/></svg> Import kontaktů</button><button class="subtle-action" id="export-action"><svg><use href="#i-download"/></svg> Export Excel / CSV</button><button class="subtle-action" id="backup-action"><svg><use href="#i-download"/></svg> Záloha zápisů JSON</button><button class="subtle-action" id="user-settings-open" data-view="settings"><svg><use href="#i-settings"/></svg> Nastavení uživatele</button><div class="side-profile"><div class="avatar" id="profile-avatar">JJ</div><div><strong id="profile-name">Jiří Janoušek</strong><small>Osobní účet</small></div><button id="logout" title="Odhlásit se">↪</button></div></div></aside>
+<div class="main-wrap"><header class="topbar"><button class="hamburger" id="hamburger" aria-label="Otevřít nabídku" aria-expanded="false"><svg><use href="#i-menu"/></svg></button><div class="top-brand-mobile">moje <b>schůzka</b></div><div class="top-breadcrumb">PRACOVNÍ PROSTOR <span>/</span> <strong id="crumb">Přehled</strong></div><div class="header-right"><span class="date" id="date-now"></span><button class="avatar avatar-small header-settings" id="header-avatar" data-view="settings" type="button" title="Nastavení uživatele" aria-label="Nastavení uživatele">JJ</button></div></header>
 <main class="content">
 <section class="view" id="overview-view">
 <div class="page-heading"><div><span class="eyebrow">OBCHODNÍ PŘEHLED</span><h1>Přehled vztahů</h1><p>Klientská péče, doporučení, spolupráce a nejbližší kroky na jednom místě.</p></div><button class="button primary" data-process="contact" data-action="contact"><svg><use href="#i-plus"/></svg> Nový kontakt</button></div>
@@ -132,6 +134,47 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
   <div class="team-columns" id="team-people"></div>
   <article class="panel coaching-history"><div class="panel-head"><h2>📅 Další kroky v týmu a spolupráci</h2></div><div id="team-tasks"></div></article>
 </section>
+<section class="view settings-shell" id="settings-view" aria-label="Nastavení uživatele" hidden>
+  <aside class="settings-sidebar">
+    <div class="settings-brand"><svg aria-hidden="true"><use href="#i-settings"/></svg><strong>Nastavení uživatele</strong></div>
+    <div class="settings-profile">
+      <div class="avatar" id="settings-avatar" aria-hidden="true">JJ</div>
+      <strong id="settings-account-name">Jiří Janoušek</strong>
+      <small>Osobní účet</small>
+    </div>
+    <nav aria-label="Sekce nastavení">
+      <span class="settings-nav-label">OSOBNÍ ÚČET</span>
+      <button type="button" data-settings-tab="profile"><svg aria-hidden="true"><use href="#i-users"/></svg> Základní údaje</button>
+      <span class="settings-nav-label">PRACOVNÍ PROSTŘEDÍ</span>
+      <button type="button" data-settings-tab="menu" aria-current="page"><svg aria-hidden="true"><use href="#i-menu"/></svg> Nastavení menu</button>
+    </nav>
+  </aside>
+  <div class="settings-main">
+    <header class="settings-top"><button type="button" class="settings-back" id="settings-back">← Zpět do Moje schůzka</button></header>
+    <section class="settings-panel" id="settings-menu-panel">
+      <h1 tabindex="-1">Nastavení menu</h1>
+      <p>Přetáhni agendy nebo je přesuň šipkami. Přehled zůstává první.</p>
+      <form id="settings-menu-form">
+        <ol id="settings-menu-list" aria-label="Pořadí agend"></ol>
+        <div class="settings-actions">
+          <button class="button primary" type="submit" id="settings-menu-save" disabled>Uložit pořadí</button>
+          <button class="button outline" type="button" id="settings-menu-reset">Obnovit výchozí</button>
+        </div>
+        <p class="settings-status" id="settings-menu-status" role="status"></p>
+      </form>
+    </section>
+    <section class="settings-panel" id="settings-profile-panel" hidden>
+      <h1 tabindex="-1">Základní údaje</h1>
+      <p>Zobrazované jméno se používá v aplikaci.</p>
+      <form id="settings-profile-form" class="settings-profile-form">
+        <label>Zobrazované jméno<input name="display_name" id="settings-display-name" autocomplete="name" maxlength="80" required></label>
+        <label>Přihlašovací e-mail<input id="settings-email" type="email" readonly></label>
+        <button class="button primary" type="submit" id="settings-profile-save">Uložit jméno</button>
+        <p class="settings-status" id="settings-profile-status" role="status"></p>
+      </form>
+    </section>
+  </div>
+</section>
 <footer class="site-footer"><strong>moje schůzka</strong> · Jiří Janoušek <span>Soukromá evidence. Záznamy pořizujte jen oprávněně.</span><a href="https://jirijanousek.cz/" target="_blank" rel="noopener">jirijanousek.cz ↗</a></footer>
 </main>
 </div></div>
@@ -169,7 +212,8 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <input id="import-file" type="file" accept=".csv,.xlsx,.xls" hidden>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="xlsx.full.min.js?v=1" defer></script>
-<script src="conversation-guide.js?v=20261107-pro1" defer></script>
-<script src="workspace.js?v=20261107-pro1" defer></script>
-<script src="app.js?v=20261107-pro1" defer></script>
+<script src="conversation-guide.js?v=20261107-settings1" defer></script>
+<script src="workspace.js?v=20261107-settings1" defer></script>
+<script src="user-settings.js?v=20261107-settings1" defer></script>
+<script src="app.js?v=20261107-settings1" defer></script>
 </body></html>
