@@ -96,6 +96,11 @@ CREATE TABLE IF NOT EXISTS practice_sessions (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id,request_key)
 );
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    display_name TEXT NOT NULL DEFAULT '',
+    menu_order TEXT NOT NULL DEFAULT '[]'
+);
 CREATE TABLE IF NOT EXISTS activity_details (
     activity_id INTEGER PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
     opening TEXT NOT NULL DEFAULT '',
@@ -290,6 +295,26 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
             if(!$q->rowCount())fail('Schůzka ani telefonát nebyly nalezeny.',404);
             reply(['ok'=>true]);
         }
+        if($action==='user_preferences'){
+            if(array_key_exists('menu_order',$data)){
+                $order=$data['menu_order'];
+                $allowed=['overview','people','day','care','results','coaching','team'];
+                if(!is_array($order)||!array_is_list($order)||count($order)>count($allowed)||
+                    ($order[0]??null)!=='overview')fail('Přehled musí zůstat první.');
+                foreach($order as $item)if(!is_string($item)||!in_array($item,$allowed,true))fail('Neplatná položka menu.');
+                if(count(array_unique($order))!==count($order))fail('Položka menu se nesmí opakovat.');
+                $db->prepare('INSERT INTO user_preferences(user_id,menu_order) VALUES(?,?)
+                    ON CONFLICT(user_id) DO UPDATE SET menu_order=excluded.menu_order')
+                    ->execute([$uid,json_encode($order,JSON_THROW_ON_ERROR)]);
+            }elseif(array_key_exists('display_name',$data)){
+                $name=is_string($data['display_name'])?trim($data['display_name']):'';
+                if(!preg_match('/^[^\x00-\x1F\x7F]{1,80}$/uD',$name))fail('Zadej zobrazované jméno o délce 1 až 80 znaků.');
+                $db->prepare('INSERT INTO user_preferences(user_id,display_name) VALUES(?,?)
+                    ON CONFLICT(user_id) DO UPDATE SET display_name=excluded.display_name')
+                    ->execute([$uid,$name]);
+            }else fail('Vyber nastavení k uložení.');
+            reply(['ok'=>true]);
+        }
         if($action==='practice_session'){
             $scenario=val($data,'scenario',50);
             $key=val($data,'request_key',50);
@@ -374,6 +399,11 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         $q=$db->prepare('SELECT scenario,response,score,created_at FROM practice_sessions WHERE user_id=? ORDER BY id DESC');
         $q->execute([$uid]);
         $data['practice_sessions']=$q->fetchAll();
+        $q=$db->prepare('SELECT display_name,menu_order FROM user_preferences WHERE user_id=?');
+        $q->execute([$uid]);
+        $preferences=$q->fetch();
+        $data['preferences']=['display_name'=>$preferences['display_name']??'',
+            'menu_order'=>json_decode($preferences['menu_order']??'[]',true)];
         reply(['ok'=>true,'data'=>$data]);
     }
     // JSON fallback for hosting layers that replace binary PHP responses with HTML.
