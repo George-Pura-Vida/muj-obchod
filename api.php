@@ -51,6 +51,21 @@ function existsOwner(PDO $db,string $table,int $id,int $uid): bool {
 function setStage(PDO $db,int $uid,int $cid,string $stage): void {
     $db->prepare('UPDATE contacts SET stage=? WHERE id=? AND user_id=?')->execute([$stage,$cid,$uid]);
 }
+function collaborationStage(array $data): string {
+    $stage=val($data,'collaboration_stage',30);
+    if(!in_array($stage,['','potential','discussing','onboarding','partner','team','no_interest'],true))fail('Neplatná fáze spolupráce.');
+    return $stage;
+}
+function saveCollaboration(PDO $db,int $contactId,string $stage): void {
+    $db->prepare('INSERT INTO collaboration_profiles(contact_id,stage) VALUES(?,?)
+        ON CONFLICT(contact_id) DO UPDATE SET stage=excluded.stage')->execute([$contactId,$stage]);
+}
+function nextCareDate(string $date,int $months): string {
+    $from=new DateTimeImmutable($date);
+    $target=$from->modify('first day of this month')->modify("+$months months");
+    return $target->setDate((int)$target->format('Y'),(int)$target->format('n'),
+        min((int)$from->format('j'),(int)$target->format('t')))->format('Y-m-d');
+}
 $action=(string)($_GET['action']??'meta');
 try {
     if(!extension_loaded('pdo_sqlite'))fail('Server potřebuje PHP rozšíření PDO SQLite.',503);
@@ -81,6 +96,16 @@ CREATE TABLE IF NOT EXISTS activity_details (
     next_time TEXT NOT NULL DEFAULT '',
     next_note TEXT NOT NULL DEFAULT '',
     followup_activity_id INTEGER REFERENCES activities(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS activity_conversation (
+    activity_id INTEGER PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
+    topic_notes TEXT NOT NULL,
+    referral_intro TEXT NOT NULL DEFAULT '',
+    context TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS collaboration_profiles (
+    contact_id INTEGER PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
+    stage TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
 CREATE INDEX IF NOT EXISTS idx_activities_contact ON activities(contact_id,user_id);
@@ -128,15 +153,20 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
             $email=val($data,'email',254);if($email!==''&&!filter_var($email,FILTER_VALIDATE_EMAIL))fail('Neplatný e-mail.');
             $stage=val($data,'stage',30);
             if(!in_array($stage,['contact','phone','meeting1','meeting2','contract','care'],true))$stage='contact';
-            $months=(int)($data['care_months']??3);if(!in_array($months,[1,3,6,12],true))$months=3;
+            $months=(int)($data['care_months']??3);if($months<1||$months>24)$months=3;
+            $collaboration=array_key_exists('collaboration_stage',$data)?collaborationStage($data):null;
             $args=[$first,$last,val($data,'phone',70),$email,val($data,'address',400),val($data,'source',200),val($data,'notes',5000),$stage,$months,dateValue($data,'next_care')];
-            if($id){if(!existsOwner($db,'contacts',$id,$uid))fail('Klient nenalezen.',404);
+            if($id)belongs($db,$uid,$id);
+            $db->beginTransaction();
+            if($id){
                 $q=$db->prepare('UPDATE contacts SET first_name=?,last_name=?,phone=?,email=?,address=?,source=?,notes=?,stage=?,care_months=?,next_care=? WHERE id=? AND user_id=?');
                 $q->execute([...$args,$id,$uid]);
             }else{
                 $q=$db->prepare('INSERT INTO contacts(first_name,last_name,phone,email,address,source,notes,stage,care_months,next_care,user_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
                 $q->execute([...$args,$uid]);$id=(int)$db->lastInsertId();
             }
+            if($collaboration!==null)saveCollaboration($db,$id,$collaboration);
+            $db->commit();
             reply(['ok'=>true,'id'=>$id]);
         }
         if($action==='activity'){
@@ -151,16 +181,55 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
             $nextNote=val($data,'next_note',1000);
             $status=val($data,'result_status',30);
             if(!in_array($status,['','success','open','declined'],true))fail('Neplatný výsledek aktivity.');
-            if(!in_array($nextKind,['','phone','meeting','email','care','crosssell','referral','cooperation','recruitment'],true))fail('Neplatný typ dalšího kroku.');
+            if(!in_array($nextKind,['','phone','meeting','email','care','crosssell','referral','cooperation','recruitment','team_onboarding','team_coaching','team_checkin','team_task'],true))fail('Neplatný typ dalšího kroku.');
             if($nextTime!==''&&!preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D',$nextTime))fail('Neplatný čas dalšího kroku.');
             if(!$nextAt&&($nextKind!==''||$nextTime!==''||$nextNote!==''))fail('K dalšímu kroku doplň datum.');
             $from=$data['followup_from_id']??null;
             if($from!==null && !($from=filter_var($from,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]])))fail('Neplatný odkaz na předchozí aktivitu.');
+            $collaboration=collaborationStage($data);
+            $frequency=null;
+            if(($data['care_frequency']??'')!==''){
+                $frequency=filter_var($data['care_frequency'],FILTER_VALIDATE_INT,['options'=>['min_range'=>1,'max_range'=>24]]);
+                if(!$frequency)fail('Frekvence péče musí být 1 až 24 měsíců.');
+            }
+            $firstCare=dateValue($data,'care_first_at');
+            $careDue=dateValue($data,'care_due');
+            if($firstCare&&($firstCare<=$at||$firstCare===$careDue))fail('Nový termín pravidelné péče musí navazovat na tuto aktivitu.');
+            if($careDue&&$kind!=='care')fail('Termín pravidelné péče uzavři zápisem typu Péče.');
+            if($firstCare&&$nextKind==='care'&&$nextAt===$firstCare)fail('Stejný termín ulož buď jako pravidelnou péči, nebo jako jednorázový další krok.');
+            $referralIntro=val($data,'referral_intro',30);
+            if(!in_array($referralIntro,['','client','introduction','joint_meeting','direct','none'],true))fail('Neplatný způsob představení.');
+            $teamConversation=($data['team_conversation']??'')==='1';
+            $topics=[];
+            foreach(['care','crosssell','referral','cooperation','recruitment','team'] as $topic){
+                if(!is_string($data['guide_'.$topic]??''))fail('Poznámka k rozhovoru musí být text.');
+                $note=val($data,'guide_'.$topic,3000);
+                if($note!=='')$topics[$topic]=$note;
+            }
             $db->beginTransaction();
             $db->prepare('INSERT INTO activities(user_id,contact_id,kind,happened_at,notes,outcome,next_at,transcript,review) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$uid,$cid,$kind,$at,$notes,val($data,'outcome',500),$nextAt,val($data,'transcript',120000),val($data,'review',20000)]);
             $id=(int)$db->lastInsertId();
             $db->prepare('INSERT INTO activity_details(activity_id,opening,findings,summary,result_status,next_kind,next_time,next_note) VALUES(?,?,?,?,?,?,?,?)')
                 ->execute([$id,val($data,'opening',3000),val($data,'findings',10000),val($data,'summary',5000),$status,$nextKind,$nextTime,$nextNote]);
+            if($topics||$referralIntro!==''||$teamConversation)$db->prepare('INSERT INTO activity_conversation(activity_id,topic_notes,referral_intro,context) VALUES(?,?,?,?)')
+                ->execute([$id,json_encode((object)$topics,JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE),$referralIntro,$teamConversation?'team':'']);
+            if($collaboration!=='')saveCollaboration($db,$cid,$collaboration);
+            if($careDue){
+                $q=$db->prepare('SELECT next_care,care_months FROM contacts WHERE id=? AND user_id=?');
+                $q->execute([$cid,$uid]);
+                $care=$q->fetch();
+                if(!$care||$care['next_care']!==$careDue){
+                    $db->rollBack();
+                    fail('Termín péče se mezitím změnil. Obnov přehled.',409);
+                }
+                $firstCare??=nextCareDate(max($at,$careDue),$frequency??max(1,(int)$care['care_months']));
+                if($nextKind==='care'&&$nextAt===$firstCare){
+                    $db->rollBack();
+                    fail('Stejný termín už vznikne jako pravidelná péče. Vyber jiný jednorázový krok.');
+                }
+            }
+            if($frequency!==null||$firstCare!==null)$db->prepare('UPDATE contacts SET care_months=COALESCE(?,care_months),next_care=COALESCE(?,next_care) WHERE id=? AND user_id=?')
+                ->execute([$frequency,$firstCare,$cid,$uid]);
             if($from!==null){
                 $q=$db->prepare('INSERT INTO activity_details(activity_id,followup_activity_id)
                     SELECT id,? FROM activities WHERE id=? AND id<>? AND user_id=? AND contact_id=? AND next_at IS NOT NULL AND next_at<>\'\'
@@ -173,7 +242,7 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
                 }
             }
             $step=['phone'=>'phone','meeting1'=>'meeting1','meeting2'=>'meeting2','meeting'=>'meeting2','care'=>'care'];
-            if(isset($step[$kind])){
+            if(isset($step[$kind])&&!$teamConversation){
                 $advance=true;
                 if($from!==null){
                     $order=['contact','phone','meeting1','meeting2','contract','care'];
@@ -261,13 +330,18 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
     if($action==='state'||$action==='backup'){
         $data=[];
         foreach(['contacts','activities','contracts','opportunities','referrals','recordings'] as $table){
-            $sql=$table==='activities'
-                ? 'SELECT a.*,d.opening,d.findings,d.summary,d.result_status,d.next_kind,d.next_time,d.next_note,d.followup_activity_id
-                   FROM activities a LEFT JOIN activity_details d ON d.activity_id=a.id WHERE a.user_id=? ORDER BY a.id DESC'
-                : "SELECT * FROM $table WHERE user_id=? ORDER BY id DESC";
+            $sql=match($table){
+                'contacts'=>'SELECT c.*,p.stage AS collaboration_stage FROM contacts c LEFT JOIN collaboration_profiles p ON p.contact_id=c.id WHERE c.user_id=? ORDER BY c.id DESC',
+                'activities'=>'SELECT a.*,d.opening,d.findings,d.summary,d.result_status,d.next_kind,d.next_time,d.next_note,d.followup_activity_id,g.topic_notes,g.referral_intro,g.context AS conversation_context
+                    FROM activities a LEFT JOIN activity_details d ON d.activity_id=a.id
+                    LEFT JOIN activity_conversation g ON g.activity_id=a.id WHERE a.user_id=? ORDER BY a.id DESC',
+                default=>"SELECT * FROM $table WHERE user_id=? ORDER BY id DESC"
+            };
             $q=$db->prepare($sql);$q->execute([$uid]);$data[$table]=$q->fetchAll();
         }
         foreach($data['recordings'] as &$record)unset($record['filename']);unset($record);
+        foreach($data['activities'] as &$activity)$activity['topic_notes']=json_decode($activity['topic_notes']??'null',true);
+        unset($activity);
         $q=$db->prepare('SELECT s.activity_id,s.scores,s.practice FROM coaching_scorecards s JOIN activities a ON a.id=s.activity_id WHERE a.user_id=?');
         $q->execute([$uid]);
         $data['scorecards']=$q->fetchAll();

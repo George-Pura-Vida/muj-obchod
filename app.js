@@ -13,7 +13,11 @@ const FOLLOWUPS = {
  crosssell:{label:'🌱 Probrat další nabídku',kind:'meeting',icon:'branch'},
  referral:{label:'🎁 Požádat o doporučení',kind:'phone',icon:'gift'},
  cooperation:{label:'🤝 Probrat spolupráci',kind:'meeting',icon:'users'},
- recruitment:{label:'👥 Probrat vstup do týmu',kind:'meeting',icon:'users'}
+ recruitment:{label:'🧭 Probrat vstup do týmu',kind:'meeting',icon:'users'},
+ team_onboarding:{label:'🎒 Naplánovat zaškolení',kind:'meeting',icon:'users'},
+ team_coaching:{label:'🎯 Domluvit koučink nebo nácvik',kind:'meeting',icon:'users'},
+ team_checkin:{label:'👥 Domluvit týmový rozhovor',kind:'meeting',icon:'users'},
+ team_task:{label:'📋 Zadat nebo zkontrolovat týmový úkol',kind:'meeting',icon:'check'}
 };
 const ACTIVITY_RESULTS = {success:'✅ Úspěšná',open:'🟡 Otevřená',declined:'⚪ Bez dohody'};
 const PRODUCTS = ['Kovový účet','Zlato','Stříbro','Bitcoinový účet','Permanentní fond','Dragon fond','Životní pojištění','Úrazové pojištění','Pojištění majetku','Pojištění nemovitosti','Pojištění firmy','Pojištění auta','Pojištění odpovědnosti','Cestovní pojištění','Jiný produkt'];
@@ -99,11 +103,16 @@ function go(next){
  view=next;
  document.querySelectorAll('.view').forEach(x=>x.hidden=x.id!==next+'-view');
  document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===next));
- $('crumb').textContent={overview:'Přehled',people:'Lidé',day:'Můj den',results:'Výsledky',coaching:'Můj trénink'}[next]||'Přehled';
+ $('crumb').textContent={overview:'Přehled',people:'Lidé',day:'Můj den',results:'Výsledky',coaching:'Můj trénink',team:'Tým a spolupráce'}[next]||'Přehled';
  $('sidebar').classList.remove('open');$('shade').hidden=true;$('hamburger').setAttribute('aria-expanded','false');
  render();window.scrollTo({top:0,behavior:'smooth'});
 }
-function render(){renderOverview();renderPeople();renderDay();renderResults();if(view==='coaching')renderCoaching();$('side-count').textContent=store.contacts.length||'';}
+function render(){
+ renderOverview();renderPeople();renderDay();renderResults();
+ if(view==='coaching')renderCoaching();
+ if(view==='team')renderTeam();
+ $('side-count').textContent=store.contacts.length||'';
+}
 function phaseBadge(stage,index){
  return '<span class="phase-badge" aria-hidden="true">'+(index+1)+' '+stage.emoji+'</span>';
 }
@@ -194,10 +203,10 @@ function taskRows(){
   if(!a.next_at||a.followup_activity_id)return;
   const plan=FOLLOWUPS[a.next_kind];
   tasks.push({when:a.next_at,time:a.next_time,label:fullname(a.contact_id),detail:nextActionLabel(a),
-   cid:a.contact_id,icon:plan?.icon||'calendar',activityId:a.id});
+   cid:a.contact_id,icon:plan?.icon||'calendar',activityId:a.id,topic:a.next_kind});
  });
  store.opportunities.forEach(o=>{if(o.next_at&&o.status==='open')tasks.push({when:o.next_at,label:fullname(o.contact_id),detail:'Následný prodej · '+o.product,cid:o.contact_id,icon:'branch'});});
- store.contacts.forEach(c=>{if(c.next_care)tasks.push({when:c.next_care,label:full(c),detail:'Pravidelná péče',cid:c.id,icon:'heart'});});
+ store.contacts.forEach(c=>{if(c.next_care)tasks.push({when:c.next_care,label:full(c),detail:'💚 Pravidelná péče · '+careFrequencyLabel(c.care_months),cid:c.id,icon:'heart',recurringCare:true,topic:'care'});});
  store.contracts.forEach(c=>{if(c.expected_at&&c.status!=='cancelled'&&(Number(c.commission_expected)>Number(c.commission_paid)))tasks.push({when:c.expected_at,label:fullname(c.contact_id),detail:'Očekávaná provize '+euros(c.commission_expected),cid:c.contact_id,icon:'coins'});});
  return tasks.sort((a,b)=>a.when.localeCompare(b.when)||(a.time||'99:99').localeCompare(b.time||'99:99'));
 }
@@ -206,11 +215,25 @@ function nextActionLabel(activity){
  return activity.next_note?label+' · '+activity.next_note:label;
 }
 function rowTask(t){
- const followup=t.activityId?'<button data-followup="'+Number(t.activityId)+'">Zapsat návaznost</button>':'';
- return '<div class="simple-row'+(followup?' followup-task':'')+'"><span class="row-icon">'+icon(t.icon||'calendar')+
+ const followup=t.activityId?'<button data-followup="'+Number(t.activityId)+'">Zapsat návaznost</button>':
+  t.recurringCare?'<button data-recurring-care="'+Number(t.cid)+'">Zapsat péči</button>':'';
+ return '<div class="simple-row'+(followup?' followup-task':'')+'" data-topic="'+esc(guideTopic(t.topic))+'"><span class="row-icon">'+icon(t.icon||'calendar')+
   '</span><div class="row-content"><strong>'+esc(t.label)+'</strong><small>'+esc(t.detail)+'</small></div><span class="row-date">'+
   when(t.when)+(t.time?' · '+esc(t.time):'')+'</span><div class="task-actions">'+followup+
   '<button data-person="'+Number(t.cid)+'">Otevřít</button></div></div>';
+}
+function renderTeam(){
+ const groups=Object.entries(COLLABORATION_STAGES).filter(([stage])=>stage!=='no_interest');
+ const people=store.contacts.slice().sort((a,b)=>full(a).localeCompare(full(b),'cs'));
+ $('team-people').innerHTML=groups.map(([stage,label])=>{
+  const members=people.filter(contact=>contact.collaboration_stage===stage);
+  return '<article class="panel team-group" data-collaboration="'+stage+'"><h2>'+label+' <span>'+members.length+'</span></h2>'+
+   (members.map(contact=>'<div class="team-person"><button data-person="'+Number(contact.id)+'">'+esc(full(contact))+
+    '</button><button class="button outline" data-team-conversation="'+Number(contact.id)+'">Zapsat rozhovor</button></div>').join('')||
+    '<p class="muted">Zatím bez lidí v této fázi.</p>')+'</article>';
+ }).join('');
+ const tasks=taskRows().filter(t=>TEAM_FOLLOWUPS.includes(t.topic));
+ $('team-tasks').innerHTML=tasks.map(rowTask).join('')||noRows('Naplánuj další krok ve spolupráci nebo v práci s týmem v zápisu rozhovoru.');
 }
 function noRows(label){return '<div class="empty">'+esc(label)+'</div>';}
 function kpi(label,value,hint,emoji){return '<div class="kpi"><i>'+emoji+'</i><span>'+esc(label)+'</span><strong>'+value+'</strong><small>'+esc(hint)+'</small></div>';}
@@ -247,7 +270,7 @@ function renderDay(){
  const acts=store.activities.slice().sort((a,b)=>b.happened_at.localeCompare(a.happened_at)||b.id-a.id).slice(0,16);
  $('day-entries').innerHTML=acts.length?acts.map(a=>{
   const rec=store.recordings.filter(r=>+r.activity_id===+a.id);
-  return '<div class="simple-row"><span class="row-icon">'+icon(a.kind==='phone'?'phone':'calendar')+'</span><div class="row-content"><strong>'+esc(fullname(a.contact_id))+'</strong><small>'+esc(KINDS[a.kind]||'Zápis')+' · '+when(a.happened_at)+' · '+esc(ACTIVITY_RESULTS[a.result_status]||a.outcome||'Bez výsledku')+'</small></div><button data-person="'+Number(a.contact_id)+'">Detail</button><button data-coach="'+Number(a.id)+'">✨ Trénink</button>'+ (rec.length?'<button data-audio="'+Number(rec[0].id)+'">▶</button>':'<button data-record="'+Number(a.id)+'">🎙️</button>')+'</div>';
+  return '<div class="simple-row"><span class="row-icon">'+icon(a.kind==='phone'?'phone':'calendar')+'</span><div class="row-content"><strong>'+esc(fullname(a.contact_id))+'</strong><small>'+esc(a.conversation_context==='team'?'👥 Týmový rozhovor':KINDS[a.kind]||'Zápis')+' · '+when(a.happened_at)+' · '+esc(ACTIVITY_RESULTS[a.result_status]||a.outcome||'Bez výsledku')+'</small></div><button data-person="'+Number(a.contact_id)+'">Detail</button><button data-coach="'+Number(a.id)+'">✨ Trénink</button>'+ (rec.length?'<button data-audio="'+Number(rec[0].id)+'">▶</button>':'<button data-record="'+Number(a.id)+'">🎙️</button>')+'</div>';
  }).join(''):noRows('Zatím tu nejsou žádné zápisy. Přidej schůzku a můžeš nahrávat.');
 }
 function renderResults(){
@@ -287,16 +310,22 @@ function person(cid){
  const opportunities=store.opportunities.filter(a=>+a.contact_id===+cid);
  const refs=store.referrals.filter(a=>+a.contact_id===+cid);
  const recordings=store.recordings;
- let html='<div class="person-summary"><p>📞 '+esc(c.phone||'Telefon neuveden')+' &nbsp; ✉ '+esc(c.email||'E-mail neuveden')+'</p><p>📍 '+esc(c.address||'Adresa neuvedena')+' &nbsp; · Zdroj: '+esc(c.source||'nezadán')+'</p><p>Aktuální fáze: <b>'+esc(STAGES[c.stage]||'Kontakt')+'</b> · Péče: každé '+(Number(c.care_months)||3)+' měsíce</p>'+(c.notes?'<p>📝 '+esc(c.notes)+'</p>':'')+'</div>';
+ let html='<div class="person-summary"><p>📞 '+esc(c.phone||'Telefon neuveden')+' &nbsp; ✉ '+esc(c.email||'E-mail neuveden')+'</p><p>📍 '+esc(c.address||'Adresa neuvedena')+' &nbsp; · Zdroj: '+esc(c.source||'nezadán')+'</p>'+
+  '<p>Aktuální fáze: <b>'+esc(STAGES[c.stage]||'Kontakt')+'</b> · 💚 Péče '+careFrequencyLabel(c.care_months)+
+  (c.next_care?' · další termín '+when(c.next_care):'')+'</p>'+
+  (c.collaboration_stage?'<p>Spolupráce: <b>'+esc(COLLABORATION_STAGES[c.collaboration_stage]||'')+'</b></p>':'')+
+  (c.notes?'<p>📝 '+esc(c.notes)+'</p>':'')+'</div>';
  html+='<div class="person-actions"><button data-action="edit" data-cid="'+Number(cid)+'">'+icon('users')+' Upravit</button><button data-action="activity" data-cid="'+Number(cid)+'">'+icon('mic')+' Schůzka / telefon</button><button data-action="contract" data-cid="'+Number(cid)+'">'+icon('file')+' Nová smlouva</button><button data-action="care" data-cid="'+Number(cid)+'">'+icon('heart')+' Následná péče</button><button data-action="opportunity" data-cid="'+Number(cid)+'">'+icon('branch')+' Další prodej</button><button data-action="referral" data-cid="'+Number(cid)+'">'+icon('gift')+' Doporučení</button></div>';
  html+='<section class="detail-section"><h3>📝 Schůzky, telefonáty a zápisy ('+acts.length+')</h3>';
  html+=acts.length?acts.map(a=>{
   const rec=recordings.filter(r=>+r.activity_id===+a.id);
-  const sections=[['👋 Otevření',a.opening],['💬 Průběh',a.notes],['🔎 Zjištění',a.findings],['🪞 Shrnutí',a.summary],['🏁 Závěr',a.outcome]]
+  const topics=CONVERSATION_GUIDE.filter(topic=>topic.next).map(topic=>[topic.icon+' '+topic.title,a.topic_notes?.[topic.id]]);
+  const sections=[['👋 Otevření',a.opening],['💬 Průběh',a.notes],['🔎 Zjištění',a.findings],...topics,
+   ['🎁 Domluvené představení',REFERRAL_INTROS[a.referral_intro]],['🪞 Shrnutí',a.summary],['🏁 Závěr',a.outcome]]
    .filter(([,value])=>value).map(([label,value])=>'<dt>'+label+'</dt><dd>'+esc(value)+'</dd>').join('');
   const next=a.next_at?'<small>'+esc(nextActionLabel(a))+' · '+when(a.next_at)+(a.next_time?' '+esc(a.next_time):'')+
    (a.followup_activity_id?' · ✅ Zapsáno':'')+'</small>':'';
-  return '<div class="detail-row"><div><b>'+esc(KINDS[a.kind]||'Poznámka')+' · '+when(a.happened_at)+'</b>'+
+  return '<div class="detail-row"><div><b>'+esc(a.conversation_context==='team'?'👥 Týmový rozhovor':KINDS[a.kind]||'Poznámka')+' · '+when(a.happened_at)+'</b>'+
    (a.result_status?'<small>'+esc(ACTIVITY_RESULTS[a.result_status]||'')+'</small>':'')+
    (sections?'<details class="activity-notes"><summary>Průběh a závěr</summary><dl>'+sections+'</dl></details>':'')+next+
    (a.next_at&&!a.followup_activity_id?'<button data-followup="'+Number(a.id)+'">Zapsat návaznost</button>':'')+
@@ -327,10 +356,82 @@ function textArea(label,name,value='',placeholder=''){
 function selectField(label,name,options){
  return '<label>'+esc(label)+'<select name="'+esc(name)+'">'+options+'</select></label>';
 }
+function careFrequencyLabel(months){
+ const count=Number(months)||3;
+ if(count===1)return 'každý měsíc';
+ return 'každé '+count+' '+(count<5?'měsíce':'měsíců');
+}
+function collaborationOptions(empty,selected=''){
+ return '<option value="">'+esc(empty)+'</option>'+Object.entries(COLLABORATION_STAGES)
+  .map(([stage,label])=>'<option value="'+stage+'"'+(stage===selected?' selected':'')+'>'+label+'</option>').join('');
+}
+function guideTopic(action){
+ if(!action)return '';
+ if(TEAM_FOLLOWUPS.includes(action)&&!['cooperation','recruitment'].includes(action))return 'team';
+ return CONVERSATION_GUIDE.find(topic=>topic.next===action)?.id||'';
+}
+function guidePanel(topic,selectedTopic){
+ const notesField=topic.field||'guide_'+topic.id;
+ const questions=topic.questions.map((question,index)=>'<li><span>'+esc(question)+'</span>'+
+  '<button type="button" data-guide-question="'+index+'" aria-label="'+esc('Přidat otázku do zápisu: '+question)+'" title="Přidat do zápisu">＋</button></li>').join('');
+ let controls='';
+ if(topic.next){
+  controls='<label>📝 Dohoda, odpovědi a vlastní otázky<textarea name="'+notesField+'" rows="2" maxlength="3000"></textarea></label>';
+  if(topic.id==='care'){
+   controls+='<div class="row-fields">'+field('Frekvence péče v měsících','care_frequency','','number',false,'min="1" max="24" step="1" placeholder="Např. 3"')+
+    field('První nebo nový termín péče','care_first_at','','date')+'</div>'+
+    '<p class="muted">Pravidelná péče je samostatný plán. Jednorázový krok můžeš domluvit níže.</p>';
+  }
+  if(topic.id==='referral')controls+=selectField('Jak proběhne představení?','referral_intro','<option value="">Nevybráno</option>'+
+   Object.entries(REFERRAL_INTROS).map(([key,label])=>'<option value="'+key+'">'+label+'</option>').join(''));
+  const actions=topic.id==='team'?TEAM_FOLLOWUPS.filter(action=>guideTopic(action)==='team'):[topic.next];
+  controls+='<div class="guide-actions">'+actions.map(action=>'<button type="button" class="button outline" data-guide-next="'+action+'">'+FOLLOWUPS[action].label+'</button>').join('')+'</div>';
+ }
+ return '<details class="guide-topic" data-topic="'+topic.id+'"'+(selectedTopic===topic.id?' open':'')+'>'+
+  '<summary><span>'+topic.icon+'</span> '+topic.title+'</summary>'+
+  '<div class="guide-topic-body"><ul>'+questions+'</ul>'+
+  (topic.hint?'<p class="guide-hint">'+esc(topic.hint)+'</p>':'')+controls+'</div></details>';
+}
+function renderGuide(selectedTopic){
+ const [opening,discovery,...remaining]=CONVERSATION_GUIDE;
+ const closing=remaining.pop();
+ return '<section class="conversation-guide" aria-label="Průvodce obchodním rozhovorem">'+
+  '<div class="guide-header"><h3>🧭 Průvodce rozhovorem</h3><p>Otevři si vhodné otázky. Tlačítkem ＋ si otázku přidej do zápisu.</p></div>'+
+  '<p class="guide-recommendation" id="guide-recommendation" hidden></p>'+
+  '<p class="guide-step">01 · Navaž kontakt a zjisti potřeby</p>'+guidePanel(opening,selectedTopic)+guidePanel(discovery,selectedTopic)+
+  '<p class="guide-step">02 · Vyber téma podle toho, co zaznělo</p>'+remaining.map(topic=>guidePanel(topic,selectedTopic)).join('')+
+  selectField('Fáze spolupráce po rozhovoru','collaboration_stage',collaborationOptions('Ponechat dosavadní stav'))+
+  '<p class="guide-step">03 · Ověř porozumění a domluv návaznost</p>'+guidePanel(closing,selectedTopic)+'</section>';
+}
+function updateGuideSuggestion(){
+ const box=$('guide-recommendation');
+ if(!box)return;
+ const fields=$('dynamic-form').elements;
+ const contact=findContact(fields.contact_id?.value);
+ const planned=formPrefill.guideTopic||(formKind==='care'?'care':'');
+ const fromStage={potential:'cooperation',discussing:'cooperation',onboarding:'recruitment',partner:'cooperation',team:'team'};
+ const topicId=planned||fromStage[contact?.collaboration_stage]||
+  (contact?.next_care||['contract','care'].includes(contact?.stage)?'care':'discovery');
+ const topic=CONVERSATION_GUIDE.find(item=>item.id===topicId);
+ box.hidden=false;
+ box.innerHTML='<span>✨ Téma pro tento rozhovor</span> <button type="button" data-guide-open="'+topic.id+'">'+topic.icon+' '+topic.title+'</button>';
+}
+function openRecurringCare(id){
+ const contact=findContact(id);
+ if(!contact?.next_care)return;
+ openForm('care',id,{careDue:contact.next_care,guideTopic:'care'});
+}
+function openTeamConversation(id){
+ const contact=findContact(id);
+ if(!contact)return;
+ const topic=['team','onboarding'].includes(contact.collaboration_stage)?'team':'cooperation';
+ openForm('activity',id,{kind:'meeting',guideTopic:topic,teamConversation:true});
+}
 function openFollowup(id){
  const activity=store.activities.find(a=>Number(a.id)===id);
  if(!activity||!activity.next_at||activity.followup_activity_id)return;
- openForm('activity',Number(activity.contact_id),{kind:FOLLOWUPS[activity.next_kind]?.kind||'phone',followup:activity});
+ openForm('activity',Number(activity.contact_id),{kind:FOLLOWUPS[activity.next_kind]?.kind||'phone',followup:activity,
+  guideTopic:guideTopic(activity.next_kind),teamConversation:TEAM_FOLLOWUPS.includes(activity.next_kind)});
 }
 function openForm(kind,cid=0,extra={}){
  if(kind!=='contact'&&kind!=='edit'&&!store.contacts.length){toast('Nejdřív přidej prvního člověka. 🙂');kind='contact';}
@@ -346,17 +447,25 @@ function openForm(kind,cid=0,extra={}){
   field('Adresa','address',c?.address||'')+field('Zdroj kontaktu','source',c?.source||'')+
   selectField('Fáze','stage',Object.entries(STAGES).map(([v,n])=>'<option value="'+v+'" '+((c?.stage||'contact')===v?'selected':'')+'>'+n+'</option>').join(''))+
   textArea('Poznámky','notes',c?.notes||'')+
-  '<div class="row-fields">'+selectField('Pravidelná péče','care_months',[1,3,6,12].map(n=>'<option value="'+n+'" '+(Number(c?.care_months||3)===n?'selected':'')+'>Každé '+n+' měs.</option>').join(''))+field('Další péče','next_care',c?.next_care||'','date')+'</div>';
+  '<div class="row-fields">'+field('Frekvence péče v měsících','care_months',c?.care_months||3,'number',true,'min="1" max="24" step="1"')+
+  field('Další pravidelná péče','next_care',c?.next_care||'','date')+'</div>'+
+  selectField('Fáze spolupráce nebo týmu','collaboration_stage',collaborationOptions('Bez zařazení',c?.collaboration_stage));
  }else if(kind==='activity'||kind==='care'){
-  title=extra.followup?'Navazující aktivita 🔁':kind==='care'?'Péče o klienta 💚':'Nový zápis z rozhovoru 🎙️';
+  title=extra.followup?'Navazující aktivita 🔁':extra.teamConversation?'Tým a spolupráce 👥':kind==='care'?'Péče o klienta 💚':'Nový zápis z rozhovoru 🎙️';
   const selected=cid||0;
   const wanted=kind==='care'?'care':(extra.kind||'meeting1');
-  html=(extra.followup?
-   '<input type="hidden" name="contact_id" value="'+Number(cid)+'"><input type="hidden" name="followup_from_id" value="'+Number(extra.followup.id)+'">'+
-   '<div class="notice">🔁 '+esc(fullname(cid))+' · '+esc(nextActionLabel(extra.followup))+'</div>':
+  html=(extra.teamConversation?'<input type="hidden" name="team_conversation" value="1">':'')+(extra.followup||extra.careDue?
+   '<input type="hidden" name="contact_id" value="'+Number(cid)+'">'+
+   (extra.followup?'<input type="hidden" name="followup_from_id" value="'+Number(extra.followup.id)+'">'+
+    '<div class="notice">🔁 '+esc(fullname(cid))+' · '+esc(nextActionLabel(extra.followup))+'</div>':
+    '<input type="hidden" name="care_due" value="'+esc(extra.careDue)+'">'+
+    '<div class="notice">💚 '+esc(fullname(cid))+' · pravidelná péče '+when(extra.careDue)+
+    '. Po zápisu se naplánuje další termín podle frekvence, pokud nezadáš vlastní.</div>'):
    selectField('👤 Člověk *','contact_id',contactOptions(selected)))+
-  selectField('Co právě proběhlo?','kind',Object.entries(KINDS).map(([v,n])=>'<option value="'+v+'" '+(wanted===v?'selected':'')+'>'+esc(n)+'</option>').join(''))+
+  (extra.careDue?'<input type="hidden" name="kind" value="care">':
+   selectField('Co právě proběhlo?','kind',Object.entries(KINDS).map(([v,n])=>'<option value="'+v+'" '+(wanted===v?'selected':'')+'>'+esc(n)+'</option>').join('')))+
   field('Datum','happened_at',TODAY(),'date',true)+
+  renderGuide(extra.guideTopic||(kind==='care'?'care':''))+
   '<fieldset class="activity-block"><legend>📝 Průběh rozhovoru</legend>'+
   '<div class="row-fields">'+textArea('👋 Otevření','opening','','Jak jsem navázal kontakt a domluvil účel?')+
   textArea('💬 Průběh','notes','','Hlavní téma, otázky a reakce klienta…')+'</div>'+
@@ -407,6 +516,7 @@ function openForm(kind,cid=0,extra={}){
  }
  $('form-title').textContent=title;
  $('form-fields').innerHTML=html;
+ updateGuideSuggestion();
  $('form-error').textContent='';
  openDialog('form-dialog');
 }
@@ -720,6 +830,8 @@ document.addEventListener('click',event=>{
  }
  if(target.dataset.record){openAudio(Number(target.dataset.record));return;}
  if(target.dataset.followup){openFollowup(Number(target.dataset.followup));return;}
+ if(target.dataset.recurringCare){openRecurringCare(Number(target.dataset.recurringCare));return;}
+ if(target.dataset.teamConversation){openTeamConversation(Number(target.dataset.teamConversation));return;}
  if(target.dataset.scorecard){openScorecard(Number(target.dataset.scorecard));return;}
  if(target.dataset.coach){openCoach(Number(target.dataset.coach));return;}
  if(target.dataset.audio){
@@ -738,6 +850,37 @@ $('auth-form').addEventListener('submit',async event=>{
  finally{$('auth-submit').disabled=false;}
 });
 $('dynamic-form').addEventListener('submit',saveForm);
+$('dynamic-form').addEventListener('change',event=>{
+ if(event.target.name==='contact_id')updateGuideSuggestion();
+});
+$('dynamic-form').addEventListener('click',event=>{
+ const button=event.target.closest('button[data-guide-open],button[data-guide-question],button[data-guide-next]');
+ if(!button)return;
+ const fields=event.currentTarget.elements;
+ if(button.dataset.guideOpen){
+  const section=event.currentTarget.querySelector('.guide-topic[data-topic="'+button.dataset.guideOpen+'"]');
+  section.open=true;
+  section.querySelector('summary').focus();
+  return;
+ }
+ if(button.dataset.guideNext){
+  fields.next_kind.value=button.dataset.guideNext;
+  fields.next_note.focus();
+  return;
+ }
+ const section=button.closest('.guide-topic');
+ const topic=CONVERSATION_GUIDE.find(item=>item.id===section.dataset.topic);
+ const field=fields[topic.field||'guide_'+topic.id];
+ const question=topic.questions[Number(button.dataset.guideQuestion)];
+ const line='Otázka: '+question;
+ if(!field.value.split('\n').includes(line)){
+  const next=[field.value.trimEnd(),line].filter(Boolean).join('\n');
+  if(field.maxLength>0&&next.length>field.maxLength){toast('Do této poznámky se další otázka nevejde.',true);return;}
+  field.value=next;
+ }
+ field.focus();
+ field.setSelectionRange(field.value.length,field.value.length);
+});
 $('people-search').addEventListener('input',renderPeople);
 $('people-stage').addEventListener('change',renderPeople);
 $('hamburger').addEventListener('click',()=>{const open=$('sidebar').classList.toggle('open');$('shade').hidden=!open;$('hamburger').setAttribute('aria-expanded',String(open));});
