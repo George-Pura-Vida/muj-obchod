@@ -370,7 +370,7 @@ function downloadPlayback(){
 function openCoach(id){
  const a=store.activities.find(x=>+x.id===+id);
  if(!a)return toast('Zápis nenalezen.',true);
- coachActivityId=+id;$('coach-transcript').value=a.transcript||'';$('coach-review').value=a.review||'';$('coach-error').textContent='';
+ coachActivityId=+id;$('coach-transcript').value=a.transcript||'';$('coach-review').value=a.review||'';$('coach-error').textContent='';$('coach-generated').hidden=true;$('coach-ready-prompt').value='';
  if($('person-dialog').open)$('person-dialog').close();
  if($('playback-dialog').open)$('playback-dialog').close();
  openDialog('coach-dialog');
@@ -380,11 +380,36 @@ async function saveCoach(){
  catch(e){$('coach-error').textContent=e.message;}
 }
 async function copyCoach(){
- const text=$('coach-transcript').value.trim();
- if(!text){$('coach-error').textContent='Nejdřív vlož přepis nebo hlavní věty ze schůzky.';return;}
- const prompt='Jsi můj profesionální obchodní kouč. Vyhodnoť průběh schůzky empaticky a s ohledem na etiku finančního poradenství. Navrhni: 1) co se povedlo, 2) 3 konkrétní zlepšení, 3) jak lépe naslouchat, 4) jak domluvit další krok, 5) otázky pro trénink rozhovoru. Nepřipisuj klientovi výroky, které nejsou v přepisu.\\n\\nPŘEPIS (anonymizován před vložením):\\n'+text+'\\n\\nMÉ HODNOCENÍ:\\n'+$('coach-review').value;
- try{await navigator.clipboard.writeText(prompt);toast('Připravený text pro AI kouče je zkopírovaný. Zkontroluj anonymizaci. ✨');}
- catch(e){$('coach-error').textContent='Kopírování se nezdařilo. Zkus HTTPS a povolení schránky.';}
+ const transcript=$('coach-transcript').value.trim();
+ if(!transcript){$('coach-error').textContent='Nejdřív vlož anonymizovaný přepis nebo nejdůležitější věty ze schůzky.';return;}
+ const prompt=[
+  'Jsi můj profesionální a etický obchodní kouč. Analyzuj výhradně dodaný přepis.',
+  'Odděl skutečné výroky účastníků od svých domněnek. Neukládej a neodvozuj citlivé údaje.',
+  'Připrav přehlednou zpětnou vazbu v češtině:',
+  '1. Stručně shrň cíl, potřeby klienta, výsledek a domluvený další krok (pokud zazněly).',
+  '2. Co se povedlo: konkrétní příklady z přepisu.',
+  '3. Co příště zlepšit: maximálně 3 jasné praktické rady a vhodnější formulace.',
+  '4. Posuď aktivní naslouchání, zjišťování potřeb, srozumitelnost a férovost. Skóre 0–10 uveď jen tam, kde máš dostatek podkladů.',
+  '5. Připrav krátký trénink rolí: 3 otázky klienta, na které mám odpovědět, a po mé odpovědi mi dej zpětnou vazbu.',
+  '6. Navrhni citlivou formulaci následné péče nebo žádosti o doporučení bez nátlaku.',
+  'Jde-li o investice či pojištění, neposuzuj vhodnost konkrétního produktu bez úplného zjištění situace klienta.',
+  '',
+  'PŘEPIS – před odesláním odstraň osobní a citlivé údaje:',
+  transcript,
+  '',
+  'MOJE VLASTNÍ HODNOCENÍ:',
+  $('coach-review').value.trim()||'Zatím nezapsáno'
+ ].join('\n');
+ $('coach-ready-prompt').value=prompt;
+ $('coach-generated').hidden=false;
+ $('coach-error').textContent='';
+ try{
+  await navigator.clipboard.writeText(prompt);
+  toast('Zadání pro AI kouče je zkopírované. Otevři ChatGPT a vlož ho tam. ✨');
+ }catch(e){
+  $('coach-ready-prompt').focus();$('coach-ready-prompt').select();
+  toast('Zadání je připravené níže. Označený text zkopíruj ručně (Ctrl+C).');
+ }
 }
 function csvRows(text){
  const delimiter=(text.split(/\r?\n/,1)[0].match(/;/g)||[]).length >= (text.split(/\r?\n/,1)[0].match(/,/g)||[]).length?';':',';
