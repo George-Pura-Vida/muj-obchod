@@ -331,31 +331,52 @@ async function openPlayback(recordingId,activityId){
  if($('person-dialog').open)$('person-dialog').close();
  openDialog('playback-dialog');
  try{
-  const response=await fetch('media.php?id='+encodeURIComponent(activePlaybackRecordingId),{credentials:'same-origin',cache:'no-store',headers:{Accept:'audio/*'}});
+  // Bez vynucování Accept: audio/* — některé hostingové proxy volí podle hlavičky jinou cestu.
+  const response=await fetch('media.php?id='+encodeURIComponent(activePlaybackRecordingId),{credentials:'same-origin',cache:'no-store'});
   if(!response.ok){
    let msg='Server odmítl nahrávku (HTTP '+response.status+').';
    try{const data=await response.json();if(data.error)msg=data.error;}catch(_){}
    throw Error(msg);
   }
-  const type=response.headers.get('Content-Type')||'';
-  if(/application\/json|text\/html/i.test(type)){
-   let detail='';
+  const type=(response.headers.get('Content-Type')||'').toLowerCase();
+  const blob=await response.blob();
+  if(!blob.size)throw Error('Na serveru je prázdná nahrávka (0 B).');
+  const bytes=new Uint8Array(await blob.slice(0,20).arrayBuffer());
+  const magic=(...nums)=>nums.every((v,i)=>bytes[i]===v);
+  // WebM (EBML), Ogg, WAV, MP3/ID3 a MP4 (ftyp).
+  // Toto zjišťuje jen typ dat; není to důkaz integrity celé nahrávky.
+  let detected='';
+  if(magic(0x1a,0x45,0xdf,0xa3))detected='audio/webm';
+  else if(magic(0x4f,0x67,0x67,0x53))detected='audio/ogg';
+  else if(magic(0x52,0x49,0x46,0x46)&&bytes[8]===0x57&&bytes[9]===0x41&&bytes[10]===0x56&&bytes[11]===0x45)detected='audio/wav';
+  else if(magic(0x49,0x44,0x33)||(bytes[0]===0xff&&(bytes[1]&0xe0)===0xe0))detected='audio/mpeg';
+  else if(bytes[4]===0x66&&bytes[5]===0x74&&bytes[6]===0x79&&bytes[7]===0x70)detected='audio/mp4';
+  const unexpectedType=/text\/html|application\/json/i.test(type);
+  if(unexpectedType&&!detected){
+   const prefix=new TextDecoder('utf-8').decode(bytes).trimStart().toLowerCase();
+   const htmlBody=prefix.startsWith('<!doctype')||prefix.startsWith('<html')||prefix.startsWith('<');
+   let detail=htmlBody?' Odpověď skutečně obsahuje HTML, nikoliv zvuk.':' V odpovědi není rozpoznatelný zvukový soubor.';
+   if(response.redirected)detail+=' Požadavek byl přesměrován.';
    try{
     const probe=await fetch('media-check.php?id='+encodeURIComponent(activePlaybackRecordingId),{credentials:'same-origin',cache:'no-store'});
     const test=await probe.json();
     if(test.ok){
      const parts=[test.file_status,test.expected_mime ? 'očekávaný formát '+test.expected_mime : '',test.detected_mime ? 'na disku '+test.detected_mime : ''].filter(Boolean);
-     detail=' Diagnostika: '+parts.join(' · ')+'.';
-    }else if(test.error)detail=' Diagnostika: '+test.error+'.';
+     detail+=' Diagnostika: '+parts.join(' · ')+'.';
+    }else if(test.error)detail+=' Diagnostika: '+test.error+'.';
    }catch(_){}
    throw Error('Server místo zvuku vrátil '+type+' (HTTP '+response.status+').'+detail);
   }
-  const blob=await response.blob();
-  if(!blob.size)throw Error('Na serveru je prázdná nahrávka (0 B). Zkontroluj, zda se při nahrávání zachytil zvuk.');
+  if(!detected&&!/^audio\/|^video\/webm/.test(type)){
+   throw Error('Nepodporovaný nebo nerozpoznaný typ odpovědi: '+(type||'neuvedeno')+'.');
+  }
+  // Pokud server chybně označil skutečný zvuk jako text/html, oprav MIME
+  // pouze v prohlížeči po ověření magických bajtů zvukového kontejneru.
+  const playable=(detected&&(unexpectedType||!/^audio\//.test(type))) ? new Blob([blob],{type:detected}) : blob;
   if(!$('playback-dialog').open||activePlaybackRecordingId!==Number(recordingId))return;
   const ext=(info?.original_name||'').split('.').pop().toLowerCase();
   activePlaybackExt=['webm','mp3','m4a','mp4','ogg','wav','aac'].includes(ext)?ext:'webm';
-  activePlaybackUrl=URL.createObjectURL(blob);
+  activePlaybackUrl=URL.createObjectURL(playable);
   player.src=activePlaybackUrl;
   player.hidden=false;
   $('playback-download').disabled=false;
