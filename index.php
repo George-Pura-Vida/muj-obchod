@@ -52,6 +52,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <button class="nav-item" data-view="people"><svg><use href="#i-users"/></svg> Lidé <span id="side-count"></span></button>
 <button class="nav-item" data-view="day"><svg><use href="#i-calendar"/></svg> Můj den</button>
 <button class="nav-item" data-view="results"><svg><use href="#i-chart"/></svg> Výsledky</button>
+<a class="nav-item" style="text-decoration:none" href="ai/index.php">✨ AI kouč schůzek</a>
 </nav>
 <div class="side-bottom"><div class="motivation">Malé kroky.<br><strong>Velké vztahy.</strong><span>✦</span></div><button class="subtle-action" id="import-action"><svg><use href="#i-upload"/></svg> Import kontaktů</button><button class="subtle-action" id="export-action"><svg><use href="#i-download"/></svg> Export Excel / CSV</button><button class="subtle-action" id="backup-action"><svg><use href="#i-download"/></svg> Záloha zápisů JSON</button><div class="side-profile"><div class="avatar">JJ</div><div><strong>Jiří Janoušek</strong><small>Osobní účet</small></div><button id="logout" title="Odhlásit se">↪</button></div></div></aside>
 <div class="main-wrap"><header class="topbar"><button class="hamburger" id="hamburger" aria-label="Otevřít nabídku" aria-expanded="false"><svg><use href="#i-menu"/></svg></button><div class="top-brand-mobile">moje <b>schůzka</b></div><div class="top-breadcrumb">PRACOVNÍ PROSTOR <span>/</span> <strong id="crumb">Přehled</strong></div><div class="header-right"><span class="date" id="date-now"></span><span class="avatar avatar-small">JJ</span></div></header>
