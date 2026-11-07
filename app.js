@@ -317,11 +317,51 @@ async function saveAudio(){
  catch(err){$('audio-error').textContent=err.message;$('save-audio').disabled=false;}
 }
 
+// WebKitty may proxy a binary PHP response as an HTML document (HTTP 200).
+// This authenticated, bounded JSON fallback never exposes a public audio URL.
+async function fetchRecordingChunks(recordingId,status){
+ let offset=0,total=0,mime='',parts=[];
+ for(let requestNo=0;requestNo<110;requestNo++){
+  const response=await fetch('api.php?action=media_chunk&id='+encodeURIComponent(recordingId)+'&offset='+offset,{credentials:'same-origin',cache:'no-store'});
+  let data;
+  try{data=await response.json();}catch(_){throw Error('Ani záložní rozhraní na serveru nevrací platná data JSON. Zkontroluj nasazení api.php na WebKitty.');}
+  if(!response.ok||!data.ok)throw Error(data.error||'Záložní přenos selhal (HTTP '+response.status+').');
+  if(requestNo===0){
+   total=Number(data.size);mime=String(data.mime||'');
+   if(!Number.isSafeInteger(total)||total<1||total>50*1024*1024||!/^audio\//.test(mime))throw Error('Server poskytl neplatné údaje o nahrávce.');
+  }
+  const next=Number(data.next_offset);
+  if(Number(data.offset)!==offset||Number(data.size)!==total||data.mime!==mime||
+     !Number.isSafeInteger(next)||next<=offset||next>total||typeof data.chunk!=='string')
+   throw Error('Záložní přenos vrátil nekonzistentní části nahrávky.');
+  let raw;
+  try{raw=atob(data.chunk);}catch(_){throw Error('Poškozená část zvukových dat.');}
+  if(raw.length!==next-offset||raw.length!==Number(data.bytes))throw Error('Nesouhlasí délka přenesené části zvuku.');
+  const bytes=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+  parts.push(bytes);
+  offset=next;
+  if(status&&status.isConnected)status.textContent='Načítám nahrávku bezpečným záložním přenosem… '+Math.round(offset/total*100)+' %';
+  if(offset===total)return new Blob(parts,{type:mime});
+ }
+ throw Error('Přenos nahrávky překročil bezpečnostní limit.');
+}
+function audioMagic(blobBytes){
+ const b=blobBytes;
+ const magic=(...values)=>values.every((v,i)=>b[i]===v);
+ if(magic(0x1a,0x45,0xdf,0xa3))return 'audio/webm';
+ if(magic(0x4f,0x67,0x67,0x53))return 'audio/ogg';
+ if(magic(0x52,0x49,0x46,0x46)&&b[8]===0x57&&b[9]===0x41&&b[10]===0x56&&b[11]===0x45)return 'audio/wav';
+ if(magic(0x49,0x44,0x33)||(b[0]===0xff&&(b[1]&0xe0)===0xe0))return 'audio/mpeg';
+ if(b[4]===0x66&&b[5]===0x74&&b[6]===0x79&&b[7]===0x70)return 'audio/mp4';
+ if(b[0]===0xff&&(b[1]&0xf0)===0xf0)return 'audio/aac';
+ return '';
+}
 async function openPlayback(recordingId,activityId){
  const info=store.recordings.find(r=>Number(r.id)===Number(recordingId));
  activePlaybackActivityId=Number(activityId)||Number(info?.activity_id)||0;
  activePlaybackRecordingId=Number(recordingId);
- const status=$('playback-status'), error=$('playback-error'), player=$('playback-player');
+ const status=$('playback-status'),error=$('playback-error'),player=$('playback-player');
  $('playback-title').textContent='Přehrát schůzku ▶';
  $('playback-coach').disabled=!activePlaybackActivityId;
  $('playback-download').disabled=true;
@@ -331,48 +371,40 @@ async function openPlayback(recordingId,activityId){
  if($('person-dialog').open)$('person-dialog').close();
  openDialog('playback-dialog');
  try{
-  // Bez vynucování Accept: audio/* — některé hostingové proxy volí podle hlavičky jinou cestu.
-  const response=await fetch('media.php?id='+encodeURIComponent(activePlaybackRecordingId),{credentials:'same-origin',cache:'no-store'});
-  if(!response.ok){
-   let msg='Server odmítl nahrávku (HTTP '+response.status+').';
-   try{const data=await response.json();if(data.error)msg=data.error;}catch(_){}
-   throw Error(msg);
-  }
-  const type=(response.headers.get('Content-Type')||'').toLowerCase();
-  const blob=await response.blob();
-  if(!blob.size)throw Error('Na serveru je prázdná nahrávka (0 B).');
-  const bytes=new Uint8Array(await blob.slice(0,20).arrayBuffer());
-  const magic=(...nums)=>nums.every((v,i)=>bytes[i]===v);
-  // WebM (EBML), Ogg, WAV, MP3/ID3 a MP4 (ftyp).
-  // Toto zjišťuje jen typ dat; není to důkaz integrity celé nahrávky.
-  let detected='';
-  if(magic(0x1a,0x45,0xdf,0xa3))detected='audio/webm';
-  else if(magic(0x4f,0x67,0x67,0x53))detected='audio/ogg';
-  else if(magic(0x52,0x49,0x46,0x46)&&bytes[8]===0x57&&bytes[9]===0x41&&bytes[10]===0x56&&bytes[11]===0x45)detected='audio/wav';
-  else if(magic(0x49,0x44,0x33)||(bytes[0]===0xff&&(bytes[1]&0xe0)===0xe0))detected='audio/mpeg';
-  else if(bytes[4]===0x66&&bytes[5]===0x74&&bytes[6]===0x79&&bytes[7]===0x70)detected='audio/mp4';
-  const unexpectedType=/text\/html|application\/json/i.test(type);
-  if(unexpectedType&&!detected){
-   const prefix=new TextDecoder('utf-8').decode(bytes).trimStart().toLowerCase();
-   const htmlBody=prefix.startsWith('<!doctype')||prefix.startsWith('<html')||prefix.startsWith('<');
-   let detail=htmlBody?' Odpověď skutečně obsahuje HTML, nikoliv zvuk.':' V odpovědi není rozpoznatelný zvukový soubor.';
-   if(response.redirected)detail+=' Požadavek byl přesměrován.';
+  let playable=null;
+  const failures=[];
+  const urls=['media.php?id='+encodeURIComponent(recordingId),'api.php?action=media&id='+encodeURIComponent(recordingId)];
+  for(const url of urls){
    try{
-    const probe=await fetch('media-check.php?id='+encodeURIComponent(activePlaybackRecordingId),{credentials:'same-origin',cache:'no-store'});
-    const test=await probe.json();
-    if(test.ok){
-     const parts=[test.file_status,test.expected_mime ? 'očekávaný formát '+test.expected_mime : '',test.detected_mime ? 'na disku '+test.detected_mime : ''].filter(Boolean);
-     detail+=' Diagnostika: '+parts.join(' · ')+'.';
-    }else if(test.error)detail+=' Diagnostika: '+test.error+'.';
-   }catch(_){}
-   throw Error('Server místo zvuku vrátil '+type+' (HTTP '+response.status+').'+detail);
+    const response=await fetch(url,{credentials:'same-origin',cache:'no-store'});
+    if(!response.ok){
+     let message='HTTP '+response.status;
+     try{const result=await response.json();if(result.error)message=result.error;}catch(_){}
+     throw Error(message);
+    }
+    const type=(response.headers.get('Content-Type')||'').toLowerCase();
+    const received=await response.blob();
+    if(!received.size)throw Error('Soubor je prázdný.');
+    const signature=new Uint8Array(await received.slice(0,20).arrayBuffer());
+    const actual=audioMagic(signature);
+    if(!actual)throw Error('Server vrátil '+(type||'neznámý formát')+' místo rozpoznatelného audio souboru.');
+    // Real magic bytes take precedence over incorrect hosting MIME metadata.
+    playable=new Blob([received],{type:actual});
+    break;
+   }catch(err){failures.push(err.message);}
   }
-  if(!detected&&!/^audio\/|^video\/webm/.test(type)){
-   throw Error('Nepodporovaný nebo nerozpoznaný typ odpovědi: '+(type||'neuvedeno')+'.');
+  if(!playable){
+   status.textContent='Běžné přehrávání není dostupné. Zkouším zabezpečený záložní přenos…';
+   try{
+    playable=await fetchRecordingChunks(recordingId,status);
+    const signature=new Uint8Array(await playable.slice(0,20).arrayBuffer());
+    const actual=audioMagic(signature);
+    if(!actual)throw Error('Nahrávka na disku nemá rozpoznatelný zvukový formát.');
+    if(actual!==playable.type)playable=new Blob([playable],{type:actual});
+   }catch(err){
+    throw Error(err.message+' Běžné cesty: '+failures.join(' | ')+'.');
+   }
   }
-  // Pokud server chybně označil skutečný zvuk jako text/html, oprav MIME
-  // pouze v prohlížeči po ověření magických bajtů zvukového kontejneru.
-  const playable=(detected&&(unexpectedType||!/^audio\//.test(type))) ? new Blob([blob],{type:detected}) : blob;
   if(!$('playback-dialog').open||activePlaybackRecordingId!==Number(recordingId))return;
   const ext=(info?.original_name||'').split('.').pop().toLowerCase();
   activePlaybackExt=['webm','mp3','m4a','mp4','ogg','wav','aac'].includes(ext)?ext:'webm';
@@ -380,12 +412,12 @@ async function openPlayback(recordingId,activityId){
   player.src=activePlaybackUrl;
   player.hidden=false;
   $('playback-download').disabled=false;
-  status.textContent='Nahrávka je načtená ('+(blob.size/1024/1024).toFixed(1)+' MB). Spusť ji tlačítkem ▶ v přehrávači.';
+  status.textContent='Nahrávka je načtená ('+(playable.size/1024/1024).toFixed(1)+' MB). Spusť ji tlačítkem ▶.';
   player.load();
- }catch(e){
+ }catch(err){
   if(!$('playback-dialog').open)return;
   status.hidden=true;
-  error.textContent=e.message+' Pokud se chyba opakuje, zkontroluj soubor a PHP server na WebKitty.';
+  error.textContent=err.message+' Pokud se chyba opakuje, zkontroluj aktualizaci PHP a WebKitty.';
  }
 }
 function closePlayback(){
