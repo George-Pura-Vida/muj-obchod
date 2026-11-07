@@ -195,6 +195,40 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         foreach($data['recordings'] as &$record)unset($record['filename']);unset($record);
         reply(['ok'=>true,'data'=>$data]);
     }
+    // JSON fallback for hosting layers that replace binary PHP responses with HTML.
+    // Each authenticated chunk is limited to 512 KiB and belongs to the session owner.
+    if($action==='media_chunk'){
+        $id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
+        if(!is_int($id))fail('Neplatné ID nahrávky.',400);
+        $q=$db->prepare('SELECT filename FROM recordings WHERE id=? AND user_id=?');
+        $q->execute([$id,$uid]);$record=$q->fetch();
+        if(!$record)fail('Nahrávka nenalezena.',404);
+        $folder=realpath($private.'/recordings');
+        $path=$folder ? realpath($folder.'/'.basename((string)$record['filename'])) : false;
+        if(!$folder||!$path||!str_starts_with($path,$folder.DIRECTORY_SEPARATOR)||!is_file($path)||!is_readable($path))
+            fail('Záznam na serveru chybí nebo ho nelze načíst.',404);
+        $ext=strtolower(pathinfo($path,PATHINFO_EXTENSION));
+        $mimes=['webm'=>'audio/webm','mp3'=>'audio/mpeg','m4a'=>'audio/mp4','mp4'=>'audio/mp4','ogg'=>'audio/ogg','wav'=>'audio/wav','aac'=>'audio/aac'];
+        if(!isset($mimes[$ext]))fail('Nepodporovaný formát.',415);
+        $size=filesize($path);
+        if($size===false||$size<=0||$size>50*1024*1024)fail('Neplatná velikost zvukového souboru.',422);
+        $offset=filter_input(INPUT_GET,'offset',FILTER_VALIDATE_INT,['options'=>['min_range'=>0]]);
+        if(!is_int($offset)||$offset>=$size)fail('Neplatná pozice čtení.',416);
+        $length=min(524288,$size-$offset);
+        $handle=fopen($path,'rb');
+        if($handle===false)fail('Záznam nelze otevřít.',503);
+        if(fseek($handle,$offset)!==0){fclose($handle);fail('Záznam nelze přečíst.',503);}
+        $chunk='';
+        while(strlen($chunk)<$length&&!feof($handle)){
+            $part=fread($handle,$length-strlen($chunk));
+            if($part===false||$part==='')break;
+            $chunk.=$part;
+        }
+        fclose($handle);
+        if(strlen($chunk)!==$length)fail('Neúplné čtení zvukového souboru.',503);
+        reply(['ok'=>true,'offset'=>$offset,'next_offset'=>$offset+$length,
+               'size'=>$size,'mime'=>$mimes[$ext],'bytes'=>$length,'chunk'=>base64_encode($chunk)]);
+    }
     if($action==='media'){
         $id=(int)($_GET['id']??0);
         $q=$db->prepare('SELECT filename,mime,original_name FROM recordings WHERE id=? AND user_id=?');
