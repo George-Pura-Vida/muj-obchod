@@ -57,3 +57,45 @@
  .coaching-table{font-size:12px}
  .coaching-table th,.coaching-table td{padding:8px 4px}
 }
+
+/* Průvodce rozhovorem a tým */
+.nav-item[data-view="team"],#team-view{--agenda-ink:#8a3656;--agenda-pale:#fce7ef;--agenda-icon:#ffbad0}
+[data-topic="opening"],[data-topic="care"]{--topic-ink:#225e47;--topic-pale:#e5f5eb}
+[data-topic="discovery"]{--topic-ink:#205c80;--topic-pale:#e7f4fc}
+[data-topic="crosssell"]{--topic-ink:#804b14;--topic-pale:#fff2db}
+[data-topic="referral"]{--topic-ink:#913958;--topic-pale:#fceaf0}
+[data-topic="cooperation"]{--topic-ink:#61407f;--topic-pale:#f3eafa}
+[data-topic="recruitment"]{--topic-ink:#1b5f64;--topic-pale:#e2f4f4}
+[data-topic="team"]{--topic-ink:#364b82;--topic-pale:#edf0fe}
+[data-topic="closing"]{--topic-ink:#814139;--topic-pale:#fceee9}
+.conversation-guide{margin:18px 0;padding:14px;border:1px solid var(--line);border-radius:14px;background:#f8faf7}
+.guide-header h3{font-size:17px}
+.guide-header p{margin-top:4px;color:#4a655b}
+.guide-step{margin:14px 0 6px;font-size:12px;font-weight:800;color:#30554a}
+.guide-recommendation{margin:10px 0;padding:8px 10px;border-radius:8px;background:#f2eafa;color:#61407f;font-weight:700}
+.guide-recommendation button{padding:6px 8px;border-radius:8px;background:#fff;color:inherit;font-weight:800;text-align:left}
+.guide-topic{margin:6px 0;border:1px solid var(--line);border-radius:9px;background:white}
+.guide-topic summary{cursor:pointer;padding:9px 10px;background:var(--topic-pale);color:var(--topic-ink);border-radius:8px;font-weight:800}
+.guide-topic summary span{margin-inline-start:3px}
+.guide-topic-body{padding:10px 12px}
+.guide-topic ul{padding-inline-start:20px;margin:0 0 10px;color:var(--topic-ink)}
+.guide-topic li{padding:3px 0;color:var(--ink)}
+.guide-topic li::marker{color:var(--topic-ink)}
+.guide-topic li button{margin-inline-start:6px;min-width:34px;min-height:32px;border-radius:7px;background:var(--topic-pale);color:var(--topic-ink);font-weight:900}
+.guide-topic label{margin-bottom:8px}
+.guide-hint{margin:10px 0;padding:8px;border-radius:7px;background:var(--topic-pale);color:var(--topic-ink)}
+.guide-actions{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 0}
+.guide-actions .button{border-color:var(--topic-ink);color:var(--topic-ink)}
+.guide-topic :focus-visible,.guide-recommendation button:focus-visible{outline:2px solid var(--pine);outline-offset:2px}
+.followup-task .row-icon{background:var(--topic-pale,#e7f2ed);color:var(--topic-ink,var(--pine))}
+.team-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,215px),1fr));gap:12px}
+.team-group{padding:14px}
+.team-group h2{margin:0 0 10px;padding:8px 10px;border-radius:8px;background:var(--team-pale,#f2eafa);color:var(--team-ink,#61407f);font-size:15px}
+.team-group h2 span{float:right}
+.team-group[data-collaboration="potential"]{--team-pale:#fff2db;--team-ink:#804b14}
+.team-group[data-collaboration="discussing"]{--team-pale:#e7f4fc;--team-ink:#205c80}
+.team-group[data-collaboration="onboarding"]{--team-pale:#e2f4f4;--team-ink:#1b5f64}
+.team-group[data-collaboration="team"]{--team-pale:#e5f5eb;--team-ink:#225e47}
+.team-person{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:7px;padding:7px 0;border-bottom:1px solid var(--line)}
+.team-person:last-child{border-bottom:0}
+.team-person button[data-person]{background:none;color:var(--ink);text-align:left;font-weight:800;overflow-wrap:anywhere;min-width:0}

@@ -12,7 +12,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261107jj2">
 <meta name="application-name" content="Moje schůzka">
 <meta name="apple-mobile-web-app-title" content="Moje schůzka">
-<link rel="stylesheet" href="style.css?v=20261107-coaching1">
+<link rel="stylesheet" href="style.css?v=20261107-guide1">
 </head>
 <body>
 <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -53,6 +53,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <button class="nav-item" data-view="day"><svg><use href="#i-calendar"/></svg> Můj den</button>
 <button class="nav-item" data-view="results"><svg><use href="#i-chart"/></svg> Výsledky</button>
 <button class="nav-item" data-view="coaching"><svg><use href="#i-check"/></svg> Můj trénink</button>
+<button class="nav-item" data-view="team"><svg><use href="#i-branch"/></svg> Tým a spolupráce</button>
 </nav>
 <div class="side-bottom"><div class="motivation">Malé kroky.<br><strong>Velké vztahy.</strong><span>✦</span></div><button class="subtle-action" id="import-action"><svg><use href="#i-upload"/></svg> Import kontaktů</button><button class="subtle-action" id="export-action"><svg><use href="#i-download"/></svg> Export Excel / CSV</button><button class="subtle-action" id="backup-action"><svg><use href="#i-download"/></svg> Záloha zápisů JSON</button><div class="side-profile"><div class="avatar">JJ</div><div><strong>Jiří Janoušek</strong><small>Osobní účet</small></div><button id="logout" title="Odhlásit se">↪</button></div></div></aside>
 <div class="main-wrap"><header class="topbar"><button class="hamburger" id="hamburger" aria-label="Otevřít nabídku" aria-expanded="false"><svg><use href="#i-menu"/></svg></button><div class="top-brand-mobile">moje <b>schůzka</b></div><div class="top-breadcrumb">PRACOVNÍ PROSTOR <span>/</span> <strong id="crumb">Přehled</strong></div><div class="header-right"><span class="date" id="date-now"></span><span class="avatar avatar-small">JJ</span></div></header>
@@ -88,6 +89,11 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
     </article>
   </div>
   <article class="panel coaching-history"><div class="panel-head"><h2>Poslední schůzky a telefonáty</h2></div><div id="coaching-activities"></div></article>
+</section>
+<section class="view" id="team-view" hidden>
+  <div class="page-heading"><div><span class="eyebrow">LIDÉ A SPOLEČNÁ PRÁCE</span><h1>Tým a spolupráce</h1><p>Od prvního rozhovoru přes zaškolení až po průběžnou práci s týmem.</p></div></div>
+  <div class="team-columns" id="team-people"></div>
+  <article class="panel coaching-history"><div class="panel-head"><h2>📅 Další kroky v týmu a spolupráci</h2></div><div id="team-tasks"></div></article>
 </section>
 <footer class="site-footer"><strong>moje schůzka</strong> · Jiří Janoušek <span>Soukromá evidence. Záznamy pořizujte jen oprávněně.</span><a href="https://jirijanousek.cz/" target="_blank" rel="noopener">jirijanousek.cz ↗</a></footer>
 </main>
@@ -126,5 +132,6 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <input id="import-file" type="file" accept=".csv,.xlsx,.xls" hidden>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="xlsx.full.min.js?v=1" defer></script>
-<script src="app.js?v=20261107-coaching1" defer></script>
+<script src="conversation-guide.js?v=20261107-guide1" defer></script>
+<script src="app.js?v=20261107-guide1" defer></script>
 </body></html>
