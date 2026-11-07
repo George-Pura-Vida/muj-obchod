@@ -12,7 +12,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261107jj2">
 <meta name="application-name" content="Moje schůzka">
 <meta name="apple-mobile-web-app-title" content="Moje schůzka">
-<link rel="stylesheet" href="style.css?v=20261107-guide1">
+<link rel="stylesheet" href="style.css?v=20261107-pro1">
 </head>
 <body>
 <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -51,6 +51,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <button class="nav-item active" data-view="overview"><svg><use href="#i-home"/></svg> Přehled</button>
 <button class="nav-item" data-view="people"><svg><use href="#i-users"/></svg> Lidé <span id="side-count"></span></button>
 <button class="nav-item" data-view="day"><svg><use href="#i-calendar"/></svg> Můj den</button>
+<button class="nav-item" data-view="care"><svg><use href="#i-heart"/></svg> Péče a doporučení</button>
 <button class="nav-item" data-view="results"><svg><use href="#i-chart"/></svg> Výsledky</button>
 <button class="nav-item" data-view="coaching"><svg><use href="#i-check"/></svg> Můj trénink</button>
 <button class="nav-item" data-view="team"><svg><use href="#i-branch"/></svg> Tým a spolupráce</button>
@@ -59,25 +60,61 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <div class="main-wrap"><header class="topbar"><button class="hamburger" id="hamburger" aria-label="Otevřít nabídku" aria-expanded="false"><svg><use href="#i-menu"/></svg></button><div class="top-brand-mobile">moje <b>schůzka</b></div><div class="top-breadcrumb">PRACOVNÍ PROSTOR <span>/</span> <strong id="crumb">Přehled</strong></div><div class="header-right"><span class="date" id="date-now"></span><span class="avatar avatar-small">JJ</span></div></header>
 <main class="content">
 <section class="view" id="overview-view">
-<div class="hero"><div class="hero-copy"><span class="eyebrow light">TVŮJ OBCHOD. TVOJE VZTAHY.</span><h1>Každá schůzka<br>se <em>počítá.</em></h1><p>Od prvního „dobrý den“ k dlouhodobému partnerství.</p><button class="button gold" data-action="contact"><svg><use href="#i-plus"/></svg> Nový kontakt</button></div><div class="hero-art"><div class="photo-circle">🤝</div><div class="float-sticker">✨ Dnes je dobrý den na další krok</div></div></div>
-<div class="section-label"><h2>Tvůj obchodní příběh</h2><span>Klikni na krok a začni</span></div>
+<div class="page-heading"><div><span class="eyebrow">OBCHODNÍ PŘEHLED</span><h1>Přehled vztahů</h1><p>Klientská péče, doporučení, spolupráce a nejbližší kroky na jednom místě.</p></div><button class="button primary" data-process="contact" data-action="contact"><svg><use href="#i-plus"/></svg> Nový kontakt</button></div>
+<div id="relationship-priorities" class="relationship-priorities"></div>
+<div class="section-label"><h2>Obchodní postup</h2><button class="button outline" data-process="contract" data-action="opportunity">+ Další příležitost</button></div>
 <div class="journey" id="journey">
-<button class="journey-tile" data-action="contact"><span class="journey-icon green"><svg><use href="#i-phone"/></svg></span><span class="journey-step">01 • ZAČÁTEK</span><strong>Kontakt</strong><small>Oslov někoho nového</small><span class="journey-add">+</span></button>
-<button class="journey-tile" data-action="activity"><span class="journey-icon blue"><svg><use href="#i-calendar"/></svg></span><span class="journey-step">02 • SETKÁNÍ</span><strong>Schůzka</strong><small>Zapiš, co se povedlo</small><span class="journey-add">+</span></button>
-<button class="journey-tile" data-action="contract"><span class="journey-icon goldish"><svg><use href="#i-file"/></svg></span><span class="journey-step">03 • VÝSLEDEK</span><strong>Smlouva</strong><small>Produkt, provize a termín</small><span class="journey-add">+</span></button>
-<button class="journey-tile" data-action="care"><span class="journey-icon pink"><svg><use href="#i-heart"/></svg></span><span class="journey-step">04 • VZTAH</span><strong>Péče</strong><small>Vrať se, poděkuj, doporuč</small><span class="journey-add">+</span></button>
+<button class="journey-tile" data-process="contact" data-action="contact"><span class="journey-icon green"><svg><use href="#i-phone"/></svg></span><span class="journey-step">01 • ZAČÁTEK</span><strong>Kontakt</strong><small>Oslov někoho nového</small><span class="journey-add">+</span></button>
+<button class="journey-tile" data-process="meeting" data-action="activity"><span class="journey-icon blue"><svg><use href="#i-calendar"/></svg></span><span class="journey-step">02 • SETKÁNÍ</span><strong>Schůzka</strong><small>Zapiš, co se povedlo</small><span class="journey-add">+</span></button>
+<button class="journey-tile" data-process="contract" data-action="contract"><span class="journey-icon goldish"><svg><use href="#i-file"/></svg></span><span class="journey-step">03 • VÝSLEDEK</span><strong>Smlouva</strong><small>Produkt, provize a termín</small><span class="journey-add">+</span></button>
+<button class="journey-tile" data-process="care" data-action="care"><span class="journey-icon pink"><svg><use href="#i-heart"/></svg></span><span class="journey-step">04 • VZTAH</span><strong>Péče</strong><small>Vrať se, poděkuj, doporuč</small><span class="journey-add">+</span></button>
+<button class="journey-tile" data-process="referral" data-action="referral"><span class="journey-icon"><svg><use href="#i-gift"/></svg></span><span class="journey-step">05 • PŘEDSTAVENÍ</span><strong>Doporučení</strong><small>Zapiš nové doporučení</small><span class="journey-add">+</span></button>
+<button class="journey-tile" data-process="team" data-view="team"><span class="journey-icon"><svg><use href="#i-branch"/></svg></span><span class="journey-step">06 • SPOLUPRÁCE</span><strong>Tým</strong><small>Příležitosti a spolupracovníci</small><span class="journey-add">→</span></button>
 </div>
 <div class="kpi-grid" id="kpi-grid"></div>
 <div class="two-col"><article class="panel"><div class="panel-head"><div><span class="eyebrow">CO JE DNES DŮLEŽITÉ</span><h2><svg class="h-icon"><use href="#i-calendar"/></svg> Můj další krok</h2></div><button class="text-link" data-view="day">Všechny úkoly →</button></div><div id="next-up"></div></article>
 <article class="panel warm"><div class="panel-head"><div><span class="eyebrow">TVÉ ÚSPĚCHY</span><h2><svg class="h-icon"><use href="#i-coins"/></svg> Provize a příležitosti</h2></div><button class="text-link" data-view="results">Více →</button></div><div id="money-overview"></div></article></div>
-<div class="section-label"><h2>Rychlé akce</h2><span>Žádné složité formuláře</span></div>
-<div class="quick-grid"><button data-action="activity"><svg><use href="#i-mic"/></svg><strong>Zapsat / nahrát schůzku</strong><small>Hlasem i textem</small></button><button data-action="opportunity"><svg><use href="#i-branch"/></svg><strong>Další prodej</strong><small>Nová příležitost</small></button><button data-action="referral"><svg><use href="#i-gift"/></svg><strong>Získat doporučení</strong><small>Nový kontakt od klienta</small></button></div>
 </section>
 <section class="view" id="people-view" hidden><div class="page-heading"><div><span class="eyebrow">TVOJE KONTAKTY A KLIENTI</span><h1>Lidé a vztahy</h1><p>Všechno důležité o člověku na jedné kartě.</p></div><button class="button primary" data-action="contact"><svg><use href="#i-plus"/></svg> Nový člověk</button></div><div class="filter-bar"><label class="searchbox"><svg><use href="#i-search"/></svg><input id="people-search" placeholder="Jméno, telefon, e-mail…"></label><select id="people-stage"><option value="">Všechny fáze</option><option value="contact">Kontakt</option><option value="phone">Telefon</option><option value="meeting1">1. schůzka</option><option value="meeting2">Další schůzky</option><option value="contract">Smlouva</option><option value="care">Péče</option></select></div><div id="people-list" class="people-list"></div></section>
 <section class="view" id="day-view" hidden><div class="page-heading"><div><span class="eyebrow">PŘEHLED BEZ STRESU</span><h1>Můj den</h1><p>Co mám udělat dnes a co mě čeká dál?</p></div><button class="button primary" data-action="activity"><svg><use href="#i-plus"/></svg> Nový zápis</button></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>📅 Naplánované kroky</h2></div><div id="day-tasks"></div></article><article class="panel"><div class="panel-head"><h2>🎙️ Poslední zápisy a nahrávky</h2></div><div id="day-entries"></div></article></div></section>
-<section class="view" id="results-view" hidden><div class="page-heading"><div><span class="eyebrow">KAŽDÝ KROK MÁ SMYSL</span><h1>Moje výsledky</h1><p>Čísla, která dávají smysl. Bez složitého CRM.</p></div><button class="button outline" id="export-results"><svg><use href="#i-download"/></svg> Exportovat data</button></div><div id="results-kpis" class="kpi-grid"></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>Jak se daří obchodu</h2></div><div id="funnel"></div></article><article class="panel"><div class="panel-head"><h2>Provize podle stavu</h2></div><div id="commissions"></div></article></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>📈 Vývoj schůzek a smluv</h2></div><div id="trend-chart"></div></article><article class="panel"><div class="panel-head"><h2>🌱 Křížový prodej</h2><button class="text-link" data-action="opportunity">Přidat →</button></div><div id="crosssell-list"></div></article></div><article class="panel" style="margin-top:18px"><div class="panel-head"><h2>💰 Kdy přijde provize</h2></div><div id="commission-list"></div></article></section>
+<section class="view" id="care-view" hidden>
+  <div class="page-heading"><div><span class="eyebrow">NÁSLEDNÁ PÉČE A DOPORUČENÍ</span><h1>Péče a doporučení</h1><p>Naplánované kontakty, úkoly po termínu a získaná doporučení.</p></div><div class="page-actions">
+    <button class="button primary" data-process="care" data-action="care"><svg><use href="#i-heart"/></svg> Zapsat péči</button>
+    <button class="button outline" data-process="referral" data-action="referral"><svg><use href="#i-gift"/></svg> Nové doporučení</button>
+  </div></div>
+  <div class="two-col">
+    <article class="panel process-panel" data-process="referral"><div class="panel-head"><h2>Péče po termínu</h2></div><div id="care-overdue"></div></article>
+    <article class="panel process-panel" data-process="care"><div class="panel-head"><h2>Naplánovaná péče</h2></div><div id="care-upcoming"></div></article>
+    <article class="panel process-panel" data-process="referral"><div class="panel-head"><h2>Další kroky k doporučením</h2></div><div id="referral-tasks"></div></article>
+    <article class="panel process-panel" data-process="referral"><div class="panel-head"><h2>Získaná doporučení</h2></div><div id="referral-register"></div></article>
+  </div>
+</section>
+<section class="view" id="results-view" hidden><div class="page-heading"><div><span class="eyebrow">KAŽDÝ KROK MÁ SMYSL</span><h1>Moje výsledky</h1><p>Čísla, která dávají smysl. Bez složitého CRM.</p></div><button class="button outline" id="export-results"><svg><use href="#i-download"/></svg> Exportovat data</button></div><div class="insight-heading"><div><h2>Rozvoj vztahů</h2><p class="muted">Období platí pro zapsané aktivity a doporučení. Pokrytí péčí a složení týmu ukazují dnešní stav.</p></div>
+<label>Období <select id="relationship-period"><option value="30">Posledních 30 dní</option><option value="90" selected>Posledních 90 dní</option><option value="180">Posledních 180 dní</option></select></label></div>
+<article class="panel process-panel" data-process="meeting"><div class="panel-head"><h2>Péče, doporučení a tým v čase</h2></div><div class="insight-body" id="relationship-trend"></div></article>
+<div class="insight-grid">
+  <article class="panel process-panel" data-process="care"><div class="panel-head"><h2>Pokrytí klientů péčí</h2></div><div class="insight-body" id="relationship-coverage"></div></article>
+  <article class="panel process-panel" data-process="referral"><div class="panel-head"><h2>Oslovení u doporučení</h2></div><div class="insight-body" id="referral-metrics"></div></article>
+  <article class="panel process-panel" data-process="team"><div class="panel-head"><h2>Fáze spolupráce</h2></div><div class="insight-body" id="team-metrics"></div></article>
+</div>
+<div class="insight-heading"><h2>Obchod a provize</h2></div>
+<div id="results-kpis" class="kpi-grid"></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>Jak se daří obchodu</h2></div><div id="funnel"></div></article><article class="panel"><div class="panel-head"><h2>Provize podle stavu</h2></div><div id="commissions"></div></article></div><div class="two-col"><article class="panel"><div class="panel-head"><h2>📈 Vývoj schůzek a smluv</h2></div><div id="trend-chart"></div></article><article class="panel"><div class="panel-head"><h2>🌱 Křížový prodej</h2><button class="text-link" data-action="opportunity">Přidat →</button></div><div id="crosssell-list"></div></article></div><article class="panel" style="margin-top:18px"><div class="panel-head"><h2>💰 Kdy přijde provize</h2></div><div id="commission-list"></div></article></section>
 <section class="view" id="coaching-view" hidden>
   <div class="page-heading"><div><span class="eyebrow">ROZVOJ OBCHODNÍCH DOVEDNOSTÍ</span><h1>Můj trénink</h1><p>Zhodnoť rozhovor, vyber jeden krok ke zlepšení a vyzkoušej ho příště.</p></div></div>
+  <div class="two-col">
+    <article class="panel process-panel" data-process="training">
+      <div class="panel-head"><div><span class="eyebrow">PRAKTICKÝ NÁCVIK</span><h2>Simulace rozhovoru</h2></div></div>
+      <form id="practice-form" class="insight-body practice-form">
+        <label>Scénář <select id="practice-scenario"></select></label>
+        <div class="scenario-situation" id="practice-situation"></div>
+        <label>Tvoje odpověď <textarea id="practice-response" required maxlength="2000" rows="4" placeholder="Napiš, co bys řekl vlastními slovy."></textarea></label>
+        <div id="practice-feedback" class="practice-feedback" hidden></div>
+        <p class="error" id="practice-error" role="alert"></p>
+        <div class="page-actions"><button class="button outline" id="practice-reveal" type="button">Porovnat s příkladem</button><button class="button primary" id="practice-save" type="submit" disabled>Uložit nácvik</button></div>
+      </form>
+    </article>
+    <article class="panel process-panel" data-process="training"><div class="panel-head"><h2>Historie nácviku</h2></div><div class="insight-body" id="practice-history"></div></article>
+  </div>
   <div class="two-col">
     <article class="panel"><div class="panel-head"><h2>📈 Pokrok podle dovednosti</h2></div><div class="coaching-body" id="coaching-progress"></div></article>
     <article class="panel warm">
@@ -91,14 +128,14 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
   <article class="panel coaching-history"><div class="panel-head"><h2>Poslední schůzky a telefonáty</h2></div><div id="coaching-activities"></div></article>
 </section>
 <section class="view" id="team-view" hidden>
-  <div class="page-heading"><div><span class="eyebrow">LIDÉ A SPOLEČNÁ PRÁCE</span><h1>Tým a spolupráce</h1><p>Od prvního rozhovoru přes zaškolení až po průběžnou práci s týmem.</p></div></div>
+  <div class="page-heading"><div><span class="eyebrow">LIDÉ A SPOLEČNÁ PRÁCE</span><h1>Tým a spolupráce</h1><p>Od prvního rozhovoru přes zaškolení až po průběžnou práci s týmem.</p></div><button class="button primary" data-action="contact" data-team-intake="1">+ Kontakt pro spolupráci</button></div>
   <div class="team-columns" id="team-people"></div>
   <article class="panel coaching-history"><div class="panel-head"><h2>📅 Další kroky v týmu a spolupráci</h2></div><div id="team-tasks"></div></article>
 </section>
 <footer class="site-footer"><strong>moje schůzka</strong> · Jiří Janoušek <span>Soukromá evidence. Záznamy pořizujte jen oprávněně.</span><a href="https://jirijanousek.cz/" target="_blank" rel="noopener">jirijanousek.cz ↗</a></footer>
 </main>
 </div></div>
-<dialog id="form-dialog" class="modal"><div class="modal-top"><div><span class="eyebrow">JEDNODUŠE, KROK ZA KROKEM</span><h2 id="form-title">Nový zápis</h2></div><button class="x-button" data-close="form-dialog" aria-label="Zavřít"><svg><use href="#i-close"/></svg></button></div><form id="dynamic-form"><div id="form-fields" class="modal-body"></div><div class="modal-footer"><button type="button" class="button outline" data-close="form-dialog">Zrušit</button><button type="submit" class="button primary">Uložit <svg><use href="#i-check"/></svg></button></div><p class="error" id="form-error"></p></form></dialog>
+<dialog id="form-dialog" class="modal" aria-labelledby="form-title"><div class="modal-top"><div><span class="eyebrow" id="form-context">OBCHODNÍ ZÁPIS</span><h2 id="form-title">Nový zápis</h2></div><button class="x-button" data-close="form-dialog" aria-label="Zavřít"><svg><use href="#i-close"/></svg></button></div><form id="dynamic-form"><div id="form-fields" class="modal-body"></div><div class="modal-footer form-footer"><p class="error" id="form-error" role="alert"></p><button type="button" class="button outline" data-close="form-dialog">Zrušit</button><button type="submit" class="button primary">Uložit <svg><use href="#i-check"/></svg></button></div></form></dialog>
 <dialog id="person-dialog" class="modal large"><div class="modal-top"><div><span class="eyebrow">KARTA KLIENTA</span><h2 id="person-title"></h2></div><button class="x-button" data-close="person-dialog" aria-label="Zavřít"><svg><use href="#i-close"/></svg></button></div><div id="person-body" class="modal-body person-body"></div></dialog>
 <dialog id="audio-dialog" class="modal"><div class="modal-top"><div><span class="eyebrow">HLASOVÝ ZÁZNAM</span><h2>Nahrát schůzku 🎙️</h2></div><button class="x-button" data-close="audio-dialog" aria-label="Zavřít"><svg><use href="#i-close"/></svg></button></div><div class="modal-body"><p class="muted">Nahrávání funguje přes mikrofon a pouze se souhlasem všech účastníků. Telefonní hovor případně přilož jako soubor.</p><div class="recorder-circle" id="recorder-circle"><svg><use href="#i-mic"/></svg><small id="record-time">00:00</small></div><div class="record-buttons"><button class="button danger" id="start-record">● Spustit záznam</button><button class="button outline" id="stop-record" disabled>■ Zastavit</button></div><audio id="audio-preview" controls hidden></audio><label class="file-label">Nebo přiložit audio (WebM, M4A, MP3, WAV, OGG; do 50 MB)<input id="audio-file" type="file" accept="audio/*,.webm,.m4a,.mp3,.ogg,.wav,.mp4"></label><button class="button primary wide" id="save-audio" disabled>Bezpečně uložit ke schůzce</button><p class="error" id="audio-error"></p></div></dialog>
 <dialog id="playback-dialog" class="modal" aria-labelledby="playback-title">
@@ -132,6 +169,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <input id="import-file" type="file" accept=".csv,.xlsx,.xls" hidden>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="xlsx.full.min.js?v=1" defer></script>
-<script src="conversation-guide.js?v=20261107-guide1" defer></script>
-<script src="app.js?v=20261107-guide1" defer></script>
+<script src="conversation-guide.js?v=20261107-pro1" defer></script>
+<script src="workspace.js?v=20261107-pro1" defer></script>
+<script src="app.js?v=20261107-pro1" defer></script>
 </body></html>

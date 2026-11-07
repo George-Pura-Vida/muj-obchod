@@ -2,7 +2,10 @@
 const $ = id => document.getElementById(id);
 const CZK = new Intl.NumberFormat('cs-CZ',{style:'currency',currency:'CZK',maximumFractionDigits:0});
 const INT = new Intl.NumberFormat('cs-CZ');
-const TODAY = () => new Date().toLocaleDateString('en-CA');
+const TODAY = () => {
+ const date=new Date();
+ return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
+};
 const STAGES = {contact:'Kontakt',phone:'Telefon',meeting1:'1. schůzka',meeting2:'Další schůzky',contract:'Smlouva',care:'Péče'};
 const KINDS = {phone:'📞 Telefonát',meeting1:'🤝 První schůzka',meeting2:'🤝 Druhá schůzka',meeting:'🤝 Další schůzka',email:'✉ E-mail',care:'💚 Péče',note:'✏️ Poznámka'};
 const FOLLOWUPS = {
@@ -103,15 +106,28 @@ function go(next){
  view=next;
  document.querySelectorAll('.view').forEach(x=>x.hidden=x.id!==next+'-view');
  document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view===next));
- $('crumb').textContent={overview:'Přehled',people:'Lidé',day:'Můj den',results:'Výsledky',coaching:'Můj trénink',team:'Tým a spolupráce'}[next]||'Přehled';
+ document.querySelectorAll('#side-nav [data-view]').forEach(x=>x.dataset.view===next?x.setAttribute('aria-current','page'):x.removeAttribute('aria-current'));
+ $('crumb').textContent={overview:'Přehled',people:'Lidé',day:'Můj den',care:'Péče a doporučení',results:'Výsledky',coaching:'Můj trénink',team:'Tým a spolupráce'}[next]||'Přehled';
  $('sidebar').classList.remove('open');$('shade').hidden=true;$('hamburger').setAttribute('aria-expanded','false');
  render();window.scrollTo({top:0,behavior:'smooth'});
 }
 function render(){
  renderOverview();renderPeople();renderDay();renderResults();
- if(view==='coaching')renderCoaching();
+ if(view==='coaching'){renderCoaching();renderPracticeHistory();}
+ if(view==='care')renderCareWorkspace();
+ if(view==='results')renderRelationshipMetrics();
  if(view==='team')renderTeam();
  $('side-count').textContent=store.contacts.length||'';
+}
+function processForStage(stage){
+ if(['phone','meeting','meeting1','meeting2'].includes(stage))return 'meeting';
+ return ['contract','care'].includes(stage)?stage:'contact';
+}
+function processForTask(task){
+ if(TEAM_FOLLOWUPS.includes(task.topic))return 'team';
+ if(['care','referral'].includes(task.topic))return task.topic;
+ if(task.icon==='coins'||task.topic==='crosssell')return 'contract';
+ return 'meeting';
 }
 function phaseBadge(stage,index){
  return '<span class="phase-badge" aria-hidden="true">'+(index+1)+' '+stage.emoji+'</span>';
@@ -217,7 +233,7 @@ function nextActionLabel(activity){
 function rowTask(t){
  const followup=t.activityId?'<button data-followup="'+Number(t.activityId)+'">Zapsat návaznost</button>':
   t.recurringCare?'<button data-recurring-care="'+Number(t.cid)+'">Zapsat péči</button>':'';
- return '<div class="simple-row'+(followup?' followup-task':'')+'" data-topic="'+esc(guideTopic(t.topic))+'"><span class="row-icon">'+icon(t.icon||'calendar')+
+ return '<div class="simple-row'+(followup?' followup-task':'')+'" data-process="'+processForTask(t)+'"><span class="row-icon">'+icon(t.icon||'calendar')+
   '</span><div class="row-content"><strong>'+esc(t.label)+'</strong><small>'+esc(t.detail)+'</small></div><span class="row-date">'+
   when(t.when)+(t.time?' · '+esc(t.time):'')+'</span><div class="task-actions">'+followup+
   '<button data-person="'+Number(t.cid)+'">Otevřít</button></div></div>';
@@ -240,7 +256,18 @@ function kpi(label,value,hint,emoji){return '<div class="kpi"><i>'+emoji+'</i><s
 function renderOverview(){
  const signed=store.contracts.filter(c=>c.status==='signed');
  const paid=sum(store.contracts,'commission_paid');
- const upcoming=taskRows().slice(0,5);
+ const tasks=taskRows();
+ const upcoming=tasks.slice(0,5);
+ const relationships=summarizeRelationships(store,tasks,TODAY());
+ const priorities=[
+  ['care','care','heart','Péče po termínu',relationships.overdue.length,'Otevřít péči'],
+  ['referral','care','gift','Získaná doporučení',store.referrals.length,relationships.referralTasks.length+' kroků k doporučením'],
+  ['team','team','branch','Kroky ve spolupráci',relationships.teamTasks.length,relationships.team.length+' lidí v přehledu']
+ ];
+ $('relationship-priorities').innerHTML=priorities.map(([tone,target,symbol,label,value,hint])=>
+  '<button class="priority-card" data-process="'+tone+'" data-view="'+target+'">'+icon(symbol)+
+  '<span>'+label+'</span><strong>'+INT.format(value)+'</strong><small>'+esc(hint)+' →</small></button>'
+ ).join('');
  $('kpi-grid').innerHTML=
   kpi('Kontakty',INT.format(store.contacts.length),'V tvé databázi','👥')+
   kpi('Schůzky',INT.format(store.activities.filter(a=>a.kind.startsWith('meeting')).length),'Zapsané návštěvy','🤝')+
@@ -262,7 +289,7 @@ function renderPeople(){
   return !needle||[full(c),c.phone,c.email,c.source,c.address].join(' ').toLocaleLowerCase('cs-CZ').includes(needle);
  }).sort((a,b)=>full(a).localeCompare(full(b),'cs'));
  $('people-list').innerHTML=all.map(c=>
- '<div class="people-card"><div class="avatar">'+esc(initials(c))+'</div><div class="person-info"><strong>'+esc(full(c))+'</strong><small>'+esc(c.phone||c.email||c.source||'Připravený kontakt')+'</small></div><span class="stage-badge'+(c.stage==='contract'?' signed':'')+'">'+esc(STAGES[c.stage]||'Kontakt')+'</span><button data-person="'+Number(c.id)+'">Detail →</button></div>').join('')||noRows(store.contacts.length?'Nenalezen žádný odpovídající kontakt.':'Přidej prvního člověka a pusť se do toho! 💚');
+ '<div class="people-card" data-process="'+processForStage(c.stage)+'"><div class="avatar">'+esc(initials(c))+'</div><div class="person-info"><strong>'+esc(full(c))+'</strong><small>'+esc(c.phone||c.email||c.source||'Připravený kontakt')+'</small></div><span class="stage-badge">'+esc(STAGES[c.stage]||'Kontakt')+'</span><button data-person="'+Number(c.id)+'">Detail →</button></div>').join('')||noRows(store.contacts.length?'Nenalezen žádný odpovídající kontakt.':'Přidej prvního člověka a pusť se do toho! 💚');
 }
 function renderDay(){
  const tasks=taskRows();
@@ -286,7 +313,7 @@ function renderResults(){
  const counts=stages.map(s=>store.contacts.filter(c=>c.stage===s).length);
  const max=Math.max(1,...counts);
  $('funnel').innerHTML=stages.map((s,i)=>
- '<div class="funnel-row"><div class="funnel-meta"><strong>'+STAGES[s]+'</strong><span>'+counts[i]+'</span></div><div class="funnel-meter"><span style="width:'+Math.max(0,(100*counts[i]/max))+'%"></span></div></div>').join('')+
+ '<div class="funnel-row" data-process="'+processForStage(s)+'"><div class="funnel-meta"><strong>'+STAGES[s]+'</strong><span>'+counts[i]+'</span></div><div class="funnel-meter"><span style="width:'+Math.max(0,(100*counts[i]/max))+'%"></span></div></div>').join('')+
  '<p class="empty">Aktuální fáze kontaktů, nikoli historická konverze.</p>';
  const outstanding=Math.max(0,expected-pay);
  const slices=expected+pay ? Math.round(100*pay/Math.max(expected,pay)) : 0;
@@ -304,6 +331,7 @@ function renderResults(){
 function person(cid){
  const c=findContact(cid);if(!c)return toast('Klient nebyl nalezen.',true);
  personId=+cid;
+ $('person-dialog').dataset.process=processForStage(c.stage);
  $('person-title').textContent=full(c);
  const acts=store.activities.filter(a=>+a.contact_id===+cid).sort((a,b)=>b.id-a.id);
  const contracts=store.contracts.filter(a=>+a.contact_id===+cid);
@@ -354,7 +382,14 @@ function textArea(label,name,value='',placeholder=''){
  return '<label>'+esc(label)+'<textarea name="'+esc(name)+'" rows="3" placeholder="'+esc(placeholder)+'">'+esc(value??'')+'</textarea></label>';
 }
 function selectField(label,name,options){
- return '<label>'+esc(label)+'<select name="'+esc(name)+'">'+options+'</select></label>';
+ return '<label>'+esc(label)+'<select name="'+esc(name)+'"'+(name==='contact_id'?' required':'')+'>'+options+'</select></label>';
+}
+function formSection(tone,title,content){
+ return '<fieldset class="form-section" data-process="'+tone+'"><legend>'+esc(title)+'</legend>'+content+'</fieldset>';
+}
+function updateNextStepTone(){
+ const next=$('dynamic-form').elements.next_kind;
+ if(next)next.closest('fieldset').dataset.process=next.value?processForTask({topic:next.value}):'care';
 }
 function careFrequencyLabel(months){
  const count=Number(months)||3;
@@ -438,23 +473,29 @@ function openForm(kind,cid=0,extra={}){
  if($('person-dialog').open)$('person-dialog').close();
  formKind=kind;formPrefill=extra;editingContactId=kind==='edit'?+cid:0;
  const c=kind==='edit'?findContact(cid):null;
+ const tone=extra.teamConversation||extra.teamIntake?'team':extra.followup?processForTask({topic:extra.followup.next_kind}):
+  ({edit:'contact',contact:'contact',activity:'meeting',care:'care',contract:'contract',opportunity:'contract',referral:'referral'})[kind];
  let title='',html='';
  if(kind==='contact'||kind==='edit'){
-  title=kind==='edit'?'Upravit člověka':'Nový kontakt 👋';
-  html='<div class="notice">Začni jen jménem a příjmením. Ostatní údaje můžeš doplnit později.</div>'+
+  title=kind==='edit'?'Upravit kontakt':extra.teamIntake?'Kontakt pro spolupráci':'Nový kontakt';
+  html=formSection('contact','01 · Kontaktní údaje',
   '<div class="row-fields">'+field('Jméno *','first_name',c?.first_name||'','text',true,'maxlength="100"')+field('Příjmení *','last_name',c?.last_name||'','text',true,'maxlength="100"')+'</div>'+
   '<div class="row-fields">'+field('📞 Telefon','phone',c?.phone||'','tel',false,'maxlength="70"')+field('✉ E-mail','email',c?.email||'','email',false,'maxlength="254"')+'</div>'+
-  field('Adresa','address',c?.address||'')+field('Zdroj kontaktu','source',c?.source||'')+
-  selectField('Fáze','stage',Object.entries(STAGES).map(([v,n])=>'<option value="'+v+'" '+((c?.stage||'contact')===v?'selected':'')+'>'+n+'</option>').join(''))+
-  textArea('Poznámky','notes',c?.notes||'')+
+  field('Adresa','address',c?.address||''))+
+  formSection('meeting','02 · Kontext vztahu',
+  '<div class="row-fields">'+field('Zdroj kontaktu','source',c?.source||'')+
+  selectField('Fáze', 'stage',Object.entries(STAGES).map(([v,n])=>'<option value="'+v+'" '+((c?.stage||'contact')===v?'selected':'')+'>'+n+'</option>').join(''))+'</div>'+
+  textArea('Poznámky','notes',c?.notes||''))+
+  formSection('care','03 · Pravidelná péče',
   '<div class="row-fields">'+field('Frekvence péče v měsících','care_months',c?.care_months||3,'number',true,'min="1" max="24" step="1"')+
-  field('Další pravidelná péče','next_care',c?.next_care||'','date')+'</div>'+
-  selectField('Fáze spolupráce nebo týmu','collaboration_stage',collaborationOptions('Bez zařazení',c?.collaboration_stage));
+  field('Další pravidelná péče','next_care',c?.next_care||'','date')+'</div>')+
+  formSection('team','04 · Spolupráce a tým',
+  selectField('Fáze spolupráce nebo týmu','collaboration_stage',collaborationOptions('Bez zařazení',c?.collaboration_stage||(extra.teamIntake?'potential':''))));
  }else if(kind==='activity'||kind==='care'){
   title=extra.followup?'Navazující aktivita 🔁':extra.teamConversation?'Tým a spolupráce 👥':kind==='care'?'Péče o klienta 💚':'Nový zápis z rozhovoru 🎙️';
   const selected=cid||0;
   const wanted=kind==='care'?'care':(extra.kind||'meeting1');
-  html=(extra.teamConversation?'<input type="hidden" name="team_conversation" value="1">':'')+(extra.followup||extra.careDue?
+  html=formSection(tone,'01 · Údaje o aktivitě',(extra.teamConversation?'<input type="hidden" name="team_conversation" value="1">':'')+(extra.followup||extra.careDue?
    '<input type="hidden" name="contact_id" value="'+Number(cid)+'">'+
    (extra.followup?'<input type="hidden" name="followup_from_id" value="'+Number(extra.followup.id)+'">'+
     '<div class="notice">🔁 '+esc(fullname(cid))+' · '+esc(nextActionLabel(extra.followup))+'</div>':
@@ -464,9 +505,9 @@ function openForm(kind,cid=0,extra={}){
    selectField('👤 Člověk *','contact_id',contactOptions(selected)))+
   (extra.careDue?'<input type="hidden" name="kind" value="care">':
    selectField('Co právě proběhlo?','kind',Object.entries(KINDS).map(([v,n])=>'<option value="'+v+'" '+(wanted===v?'selected':'')+'>'+esc(n)+'</option>').join('')))+
-  field('Datum','happened_at',TODAY(),'date',true)+
+  field('Datum','happened_at',TODAY(),'date',true))+
   renderGuide(extra.guideTopic||(kind==='care'?'care':''))+
-  '<fieldset class="activity-block"><legend>📝 Průběh rozhovoru</legend>'+
+  '<fieldset class="form-section" data-process="'+tone+'"><legend>02 · Průběh rozhovoru</legend>'+
   '<div class="row-fields">'+textArea('👋 Otevření','opening','','Jak jsem navázal kontakt a domluvil účel?')+
   textArea('💬 Průběh','notes','','Hlavní téma, otázky a reakce klienta…')+'</div>'+
   '<div class="row-fields">'+textArea('🔎 Zjištění','findings','','Co jsem zjistil o potřebách, prioritách nebo překážkách?')+
@@ -474,7 +515,7 @@ function openForm(kind,cid=0,extra={}){
   '<div class="row-fields">'+field('🏁 Závěr','outcome','','text',false,'maxlength="500" placeholder="Např. klient chce vidět návrh"')+
   selectField('Výsledek','result_status','<option value="">Bez hodnocení</option>'+Object.entries(ACTIVITY_RESULTS)
    .map(([v,label])=>'<option value="'+v+'">'+label+'</option>').join(''))+'</div></fieldset>'+
-  '<fieldset class="activity-block activity-plan"><legend>🎯 Domluvený další krok</legend>'+
+  '<fieldset class="form-section" data-process="care"><legend>03 · Domluvený další krok</legend>'+
   selectField('Co udělám?','next_kind','<option value="">Nevybráno</option>'+Object.entries(FOLLOWUPS)
    .map(([v,plan])=>'<option value="'+v+'">'+plan.label+'</option>').join(''))+
   field('Co přesně připravím nebo nabídnu?','next_note','','text',false,'maxlength="1000" placeholder="Např. poslat srovnání, probrat péči nebo se zeptat na doporučení"')+
@@ -483,37 +524,44 @@ function openForm(kind,cid=0,extra={}){
   '<p class="muted">Jakmile zadáš datum, krok se objeví v agendě Můj den.</p></fieldset>'+
   '<div class="notice">🎙️ Po uložení můžeš přidat nahrávku schůzky. V telefonu přímo v prohlížeči lze nahrávat mikrofon; telefonní hovory nahrané jinde lze přiložit jako soubor.</div>';
  }else if(kind==='contract'){
-  title='Nová smlouva ✍️';
-  html=selectField('👤 Klient *','contact_id',contactOptions(cid))+
+  title='Nová smlouva';
+  html=formSection('contract','01 · Klient a smlouva',selectField('👤 Klient *','contact_id',contactOptions(cid))+
   selectField('Produkt','product',productOptions())+
-  '<div class="row-fields">'+field('Objem smlouvy v Kč','value','0','number',false,'min="0" step="0.01"')+
-  field('Očekávaná provize v Kč','commission_expected','0','number',false,'min="0" step="0.01"')+'</div>'+
-  '<div class="row-fields">'+field('Kdy má přijít provize?','expected_at','','date')+
-  selectField('Stav smlouvy','status','<option value="signed">Uzavřená</option><option value="pending">Rozpracovaná</option><option value="cancelled">Stornovaná</option>')+'</div>'+
+  selectField('Stav smlouvy','status','<option value="signed">Uzavřená</option><option value="pending">Rozpracovaná</option><option value="cancelled">Stornovaná</option>')+
+  field('Objem smlouvy v Kč','value','0','number',false,'min="0" step="0.01"'))+
+  formSection('contract','02 · Očekávaná provize',
+  '<div class="row-fields">'+field('Očekávaná provize v Kč','commission_expected','0','number',false,'min="0" step="0.01"')+
+  field('Kdy má přijít provize?','expected_at','','date')+'</div>')+
+  formSection('care','03 · Skutečná výplata',
   '<div class="row-fields">'+field('Kolik je skutečně vyplaceno v Kč','commission_paid','0','number',false,'min="0" step="0.01"')+
   field('Skutečné datum výplaty','paid_at','','date')+'</div>'+
-  textArea('Poznámka','notes','','Doplň číslo smlouvy nebo podmínky…')+
+  textArea('Poznámka','notes','','Doplň číslo smlouvy nebo podmínky…'))+
   '<div class="notice">Provize jsou odděleny na očekávané a skutečně vyplacené. V ostrém provozu je ověř podle vyúčtování.</div>';
  }else if(kind==='opportunity'){
-  title='Co dalšího nabídnout? 🌱';
-  html=selectField('👤 Klient *','contact_id',contactOptions(cid))+
+  title='Nová obchodní příležitost';
+  html=formSection('contract','01 · Potřeba a nabídka',selectField('👤 Klient *','contact_id',contactOptions(cid))+
   selectField('Produkt, o kterém se pobavíme','product',productOptions())+
-  textArea('Proč by to klient mohl potřebovat?','notes','','Nejdřív ověř přání, potřeby a vhodnost produktu…')+
+  textArea('Proč by to klient mohl potřebovat?','notes','','Nejdřív ověř přání, potřeby a vhodnost produktu…'))+
+  formSection('care','02 · Potenciál a termín',
   '<div class="row-fields">'+field('Potenciál v Kč','potential','0','number',false,'min="0" step="0.01"')+
   field('Možná provize v Kč','expected_commission','0','number',false,'min="0" step="0.01"')+'</div>'+
   '<div class="row-fields">'+field('Kdy se ozvu?','next_at','','date')+
-  selectField('Stav příležitosti','status','<option value="open">Otevřeno</option><option value="won">Podařilo se</option><option value="lost">Nevyšlo</option>')+'</div>'+
+  selectField('Stav příležitosti','status','<option value="open">Otevřeno</option><option value="won">Podařilo se</option><option value="lost">Nevyšlo</option>')+'</div>')+
   '<div class="notice">Nápad na další prodej není automatické investiční doporučení. Vhodnost ověř při jednání.</div>';
  }else if(kind==='referral'){
-  title='Získat doporučení 🤝';
-  html='<div class="notice">Zkus se zeptat: „Co se vám na naší spolupráci líbí?“ „Komu dalšímu by mohlo něco podobného pomoci?“</div>'+
+  title='Nové doporučení';
+  html=formSection('referral','01 · Doporučující a doporučený',
   selectField('👤 Doporučující klient','contact_id',contactOptions(cid))+
+  '<div class="row-fields">'+
   field('Jméno doporučeného člověka *','name','','text',true)+
-  field('Telefon doporučeného','phone','','tel')+
-  '<label><input type="checkbox" name="permission" value="1" style="width:auto;margin-right:8px">Mám ověřené oprávnění doporučeného člověka kontaktovat.</label>'+
-  textArea('Poznámka','notes','')+
+  field('Telefon doporučeného','phone','','tel')+'</div>')+
+  formSection('referral','02 · Domluva na představení',
+  '<label class="check-field"><input type="checkbox" name="permission" value="1">Mám ověřené oprávnění doporučeného člověka kontaktovat.</label>'+
+  textArea('Jak se představíme?','notes','','Např. klient nás nejdřív propojí.'))+
   '<div class="notice">Bez oprávnění kontakt neoslovuj. Zapisuj jen nezbytné osobní údaje.</div>';
  }
+ $('form-dialog').dataset.process=tone;
+ $('form-context').textContent=({contact:'KLIENT A KONTAKT',meeting:'SCHŮZKY A HOVORY',care:'PÉČE O KLIENTA',contract:'OBCHOD A PROVIZE',referral:'DOPORUČENÍ',team:'TÝM A SPOLUPRÁCE'})[tone];
  $('form-title').textContent=title;
  $('form-fields').innerHTML=html;
  updateGuideSuggestion();
@@ -531,11 +579,13 @@ async function saveForm(e){
   const result=await request(kind,data);
   $('form-dialog').close();await refresh();
   toast('Uloženo! Další krok je zase o něco blíž. ✨');
-  if(kind==='contact'){go('people');person(result.id);}
+  if(kind==='contact'){go(formPrefill.teamIntake?'team':'people');person(result.id);}
   else if(kind==='activity'){
-   go('day');
+   go(formPrefill.teamConversation?'team':formKind==='care'||view==='care'?'care':'day');
    if(formPrefill.record || wantRecording){wantRecording=false;openAudio(result.id);}
-  }else if(kind==='contract'||kind==='referral'||kind==='opportunity'){
+  }else if(kind==='referral'){
+   go('care');
+  }else if(kind==='contract'||kind==='opportunity'){
    go('results');
   }
  }catch(err){$('form-error').textContent=err.message;}
@@ -825,7 +875,7 @@ document.addEventListener('click',event=>{
  if(target.dataset.action){
   const kind=target.dataset.action;
   const cid=Number(target.dataset.cid)||0;
-  openForm(kind,cid,kind==='activity'?{record:true}:{});
+  openForm(kind,cid,{record:kind==='activity',teamIntake:target.dataset.teamIntake==='1'});
   return;
  }
  if(target.dataset.record){openAudio(Number(target.dataset.record));return;}
@@ -852,6 +902,7 @@ $('auth-form').addEventListener('submit',async event=>{
 $('dynamic-form').addEventListener('submit',saveForm);
 $('dynamic-form').addEventListener('change',event=>{
  if(event.target.name==='contact_id')updateGuideSuggestion();
+ if(event.target.name==='next_kind')updateNextStepTone();
 });
 $('dynamic-form').addEventListener('click',event=>{
  const button=event.target.closest('button[data-guide-open],button[data-guide-question],button[data-guide-next]');
@@ -865,6 +916,7 @@ $('dynamic-form').addEventListener('click',event=>{
  }
  if(button.dataset.guideNext){
   fields.next_kind.value=button.dataset.guideNext;
+  updateNextStepTone();
   fields.next_note.focus();
   return;
  }
@@ -937,6 +989,8 @@ $('save-audio').addEventListener('click',saveAudio);
 $('coach-save').addEventListener('click',saveCoach);
 $('coach-scorecard').addEventListener('click',()=>openScorecard(coachActivityId));
 $('scorecard-form').addEventListener('submit',saveScorecard);
+$('relationship-period').addEventListener('change',renderRelationshipMetrics);
+installScenarioPractice();
 const practicePicker=$('coaching-focus-picker');
 practicePicker.innerHTML='<button type="button" data-practice-stage="" aria-pressed="true">✨ Doporučeno</button>'+
  COACHING_STAGES.map((stage,index)=>'<button type="button" data-phase="'+stage.id+'" data-practice-stage="'+stage.id+
