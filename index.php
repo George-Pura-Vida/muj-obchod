@@ -80,5 +80,6 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <dialog id="coach-dialog" class="modal"><div class="modal-top"><div><span class="eyebrow">UČÍM SE Z KAŽDÉ SCHŮZKY</span><h2>Trénink a vyhodnocení ✨</h2></div><button class="x-button" data-close="coach-dialog" aria-label="Zavřít"><svg><use href="#i-close"/></svg></button></div><div class="modal-body"><p class="muted">Zapiš nebo vlož přepis. AI se zatím nepřipojuje automaticky: připravím ti text pro bezpečné ruční vyhodnocení v ChatGPT.</p><label>Přepis / důležité věty<textarea id="coach-transcript" rows="7" placeholder="Co řekl klient, jak jsem reagoval, co jsme dohodli…"></textarea></label><label>Moje vlastní hodnocení<textarea id="coach-review" rows="3" placeholder="Co se povedlo a co příště zlepším?"></textarea></label><div class="record-buttons"><button class="button outline" id="coach-save">Uložit poznámky</button><button class="button primary" id="coach-copy">✨ Připravit pro AI kouče</button></div><p class="tiny-warning">Před kopírováním do externí AI odstraň jména, kontakty, citlivé a důvěrné informace; dodrž účel zpracování a oprávnění účastníků.</p><p class="error" id="coach-error"></p></div></dialog>
 <input id="import-file" type="file" accept=".csv,.xlsx,.xls" hidden>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<script src="app.js?v=20261107a" defer></script>
+<script src="xlsx.full.min.js?v=1" defer></script>
+<script src="app.js?v=20261107b" defer></script>
 </body></html>
