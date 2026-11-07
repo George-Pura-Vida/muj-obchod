@@ -338,7 +338,18 @@ async function openPlayback(recordingId,activityId){
    throw Error(msg);
   }
   const type=response.headers.get('Content-Type')||'';
-  if(/application\/json|text\/html/i.test(type))throw Error('Server místo zvuku vrátil '+type+' (HTTP '+response.status+'). Ověř nasazení media.php a přihlášení.');
+  if(/application\/json|text\/html/i.test(type)){
+   let detail='';
+   try{
+    const probe=await fetch('media-check.php?id='+encodeURIComponent(activePlaybackRecordingId),{credentials:'same-origin',cache:'no-store'});
+    const test=await probe.json();
+    if(test.ok){
+     const parts=[test.file_status,test.expected_mime ? 'očekávaný formát '+test.expected_mime : '',test.detected_mime ? 'na disku '+test.detected_mime : ''].filter(Boolean);
+     detail=' Diagnostika: '+parts.join(' · ')+'.';
+    }else if(test.error)detail=' Diagnostika: '+test.error+'.';
+   }catch(_){}
+   throw Error('Server místo zvuku vrátil '+type+' (HTTP '+response.status+').'+detail);
+  }
   const blob=await response.blob();
   if(!blob.size)throw Error('Na serveru je prázdná nahrávka (0 B). Zkontroluj, zda se při nahrávání zachytil zvuk.');
   if(!$('playback-dialog').open||activePlaybackRecordingId!==Number(recordingId))return;

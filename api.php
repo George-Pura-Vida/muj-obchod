@@ -205,9 +205,11 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         $size=filesize($path);
         if($size===false||$size<=0)fail('Zvukový soubor je prázdný.',404);
         $ext=strtolower(pathinfo((string)$record['filename'],PATHINFO_EXTENSION));
+        // Nepoužívej nekontrolovanou MIME hodnotu ze staršího DB záznamu.
+        // Chybná metadata (např. text/html) by při přehrávání vyřadila audio.
         $knownMimes=['webm'=>'audio/webm','mp3'=>'audio/mpeg','m4a'=>'audio/mp4','mp4'=>'audio/mp4','ogg'=>'audio/ogg','wav'=>'audio/wav','aac'=>'audio/aac'];
-        $mime=(string)$record['mime'];
-        if($mime==='application/octet-stream')$mime=$knownMimes[$ext]??'application/octet-stream';
+        if(!isset($knownMimes[$ext]))fail('Nepodporovaná přípona zvukového souboru.',415);
+        $mime=$knownMimes[$ext];
         $from=0;$to=$size-1;$range=(string)($_SERVER['HTTP_RANGE']??'');
         if($range!==''){
             if(!preg_match('/^bytes=(\\d*)-(\\d*)$/D',$range,$m) || ($m[1]===''&&$m[2]==='')){
