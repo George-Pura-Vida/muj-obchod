@@ -86,6 +86,16 @@ CREATE TABLE IF NOT EXISTS coaching_scorecards (
     scores TEXT NOT NULL,
     practice TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS practice_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    request_key TEXT NOT NULL,
+    scenario TEXT NOT NULL,
+    response TEXT NOT NULL,
+    score INTEGER NOT NULL CHECK(score BETWEEN 0 AND 3),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id,request_key)
+);
 CREATE TABLE IF NOT EXISTS activity_details (
     activity_id INTEGER PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
     opening TEXT NOT NULL DEFAULT '',
@@ -280,6 +290,20 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
             if(!$q->rowCount())fail('Schůzka ani telefonát nebyly nalezeny.',404);
             reply(['ok'=>true]);
         }
+        if($action==='practice_session'){
+            $scenario=val($data,'scenario',50);
+            $key=val($data,'request_key',50);
+            $score=$data['score']??null;
+            $answer=$data['response']??null;
+            $scenarios=['care_checkin','care_return','referral_value','referral_hesitation','team_invite','team_feedback','crosssell_need','close_summary'];
+            if(!in_array($scenario,$scenarios,true)||!is_int($score)||$score<0||$score>3||
+                !is_string($answer)||trim($answer)===''||!preg_match('/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/D',$key)){
+                fail('Zkontroluj odpověď a sebehodnocení nácviku.');
+            }
+            $db->prepare('INSERT INTO practice_sessions(user_id,request_key,scenario,response,score) VALUES(?,?,?,?,?)
+                ON CONFLICT(user_id,request_key) DO NOTHING')->execute([$uid,$key,$scenario,val($data,'response',2000),$score]);
+            reply(['ok'=>true]);
+        }
         if($action==='contract'){
             $cid=(int)($data['contact_id']??0);belongs($db,$uid,$cid);
             $status=val($data,'status',30);if(!in_array($status,['pending','signed','cancelled'],true))fail('Neplatný stav smlouvy.');
@@ -347,6 +371,9 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         $data['scorecards']=$q->fetchAll();
         foreach($data['scorecards'] as &$card)$card['scores']=json_decode($card['scores'],true);
         unset($card);
+        $q=$db->prepare('SELECT scenario,response,score,created_at FROM practice_sessions WHERE user_id=? ORDER BY id DESC');
+        $q->execute([$uid]);
+        $data['practice_sessions']=$q->fetchAll();
         reply(['ok'=>true,'data'=>$data]);
     }
     // JSON fallback for hosting layers that replace binary PHP responses with HTML.
