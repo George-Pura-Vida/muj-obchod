@@ -196,13 +196,52 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         reply(['ok'=>true,'data'=>$data]);
     }
     if($action==='media'){
-        $id=(int)($_GET['id']??0);$q=$db->prepare('SELECT filename,mime,original_name FROM recordings WHERE id=? AND user_id=?');
-        $q->execute([$id,$uid]);$record=$q->fetch();if(!$record)fail('Nahrávka nenalezena.',404);
-        $path=$private.'/recordings/'.basename($record['filename']);
-        if(!is_file($path))fail('Soubor neexistuje.',404);
-        header('Content-Type: '.($record['mime']==='application/octet-stream'?'audio/webm':$record['mime']));
-        header('Content-Length: '.filesize($path));header('Content-Disposition: inline; filename="nahravka.'.pathinfo($record['filename'],PATHINFO_EXTENSION).'"');
-        readfile($path);exit;
+        $id=(int)($_GET['id']??0);
+        $q=$db->prepare('SELECT filename,mime,original_name FROM recordings WHERE id=? AND user_id=?');
+        $q->execute([$id,$uid]);$record=$q->fetch();
+        if(!$record)fail('Nahrávka nenalezena.',404);
+        $path=$private.'/recordings/'.basename((string)$record['filename']);
+        if(!is_file($path)||!is_readable($path))fail('Záznam na serveru chybí nebo ho nelze načíst.',404);
+        $size=filesize($path);
+        if($size===false||$size<=0)fail('Zvukový soubor je prázdný.',404);
+        $ext=strtolower(pathinfo((string)$record['filename'],PATHINFO_EXTENSION));
+        $knownMimes=['webm'=>'audio/webm','mp3'=>'audio/mpeg','m4a'=>'audio/mp4','mp4'=>'audio/mp4','ogg'=>'audio/ogg','wav'=>'audio/wav','aac'=>'audio/aac'];
+        $mime=(string)$record['mime'];
+        if($mime==='application/octet-stream')$mime=$knownMimes[$ext]??'application/octet-stream';
+        $from=0;$to=$size-1;$range=(string)($_SERVER['HTTP_RANGE']??'');
+        if($range!==''){
+            if(!preg_match('/^bytes=(\\d*)-(\\d*)$/D',$range,$m) || ($m[1]===''&&$m[2]==='')){
+                header('Content-Range: bytes */'.$size);fail('Neplatný rozsah zvukového souboru.',416);
+            }
+            if($m[1]===''){
+                $suffix=(int)$m[2];
+                if($suffix<=0){header('Content-Range: bytes */'.$size);fail('Neplatný rozsah.',416);}
+                $from=max(0,$size-$suffix);
+            }else{
+                $from=(int)$m[1];
+                if($m[2]!=='')$to=min($to,(int)$m[2]);
+            }
+            if($from>$to||$from>=$size){
+                header('Content-Range: bytes */'.$size);fail('Požadovaný úsek neexistuje.',416);
+            }
+            http_response_code(206);
+            header('Content-Range: bytes '.$from.'-'.$to.'/'.$size);
+        }
+        header('Content-Type: '.$mime);
+        header('Accept-Ranges: bytes');
+        header('Content-Length: '.($to-$from+1));
+        header('Content-Disposition: inline; filename="nahravka.'.$ext.'"');
+        session_write_close();
+        $handle=fopen($path,'rb');
+        if($handle===false)exit;
+        fseek($handle,$from);
+        $remaining=$to-$from+1;
+        while($remaining>0&&!feof($handle)){
+            $bytes=fread($handle,min(65536,$remaining));
+            if($bytes===false||$bytes==='')break;
+            echo $bytes;$remaining-=strlen($bytes);
+        }
+        fclose($handle);exit;
     }
     if($action==='csv'){
         header('Content-Type: text/csv; charset=UTF-8');
