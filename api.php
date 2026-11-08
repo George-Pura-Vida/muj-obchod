@@ -142,7 +142,16 @@ CREATE INDEX IF NOT EXISTS idx_contracts_contact ON contracts(contact_id,user_id
 CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id,user_id);");
     migrateAccounts($db);
     $userCount=(int)$db->query('SELECT COUNT(*) FROM users')->fetchColumn();
-    $cfg=is_file(__DIR__.'/config.local.php') ? require __DIR__.'/config.local.php' : [];
+    $cfg=[];
+    if (is_file(__DIR__.'/config.local.php')) {
+        // Keep stray configuration output from sending headers before session ID rotation.
+        ob_start();
+        try {
+            $cfg=require __DIR__.'/config.local.php';
+        } finally {
+            ob_end_clean();
+        }
+    }
     if(!is_array($cfg))$cfg=[];
     $setupKey=(string)(getenv('MS_SETUP_KEY')?:($cfg['setup_key']??''));
     $setupAvailable=$userCount===0 && strlen($setupKey)>=32;
