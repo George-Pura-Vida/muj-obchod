@@ -72,11 +72,17 @@ function sum(a,field){return a.reduce((total,x)=>total+(Number(x[field])||0),0);
 function icon(name){return '<svg><use href="#i-'+name+'"/></svg>';}
 function dateList(a,field){return a.filter(x=>x[field]).sort((a,b)=>String(a[field]).localeCompare(String(b[field])));}
 function toast(message,isError=false){const box=$('toast');box.textContent=message;box.style.background=isError?'#aa4e4b':'#164638';box.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>box.classList.remove('show'),3800);}
-async function request(action,data,form=false){
- const opt={credentials:'same-origin',headers:{}};
+const RETRY_AUTH_CSRF=new Set(['login','register','reset_request','reset_redeem']);
+async function request(action,data,form=false,retryCsrf=true){
+ const opt={credentials:'same-origin',cache:'no-store',headers:{}};
  if(data!==undefined){opt.method='POST';opt.headers['X-CSRF-Token']=csrf;if(form)opt.body=data;else{opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(data);}}
  const response=await fetch('api.php?action='+encodeURIComponent(action),opt);
  let result;try{result=await response.json();}catch(_){throw Error('Server vrátil neplatnou odpověď. Zkontroluj PHP a umístění souborů.');}
+ if(response.status===403&&result.code==='csrf_expired'&&retryCsrf&&RETRY_AUTH_CSRF.has(action)){
+  const meta=await request('meta');
+  csrf=meta.csrf;
+  return request(action,data,form,false);
+ }
  if(response.status===401&&signedInAccount&&action!=='login')location.reload();
  if(!response.ok||!result.ok)throw Error(result.error||'Chyba serveru');
  return result;

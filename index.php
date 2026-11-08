@@ -300,5 +300,5 @@ header('Cache-Control: no-cache');
 <script src="workspace.js?v=20261107-settings1" defer></script>
 <script src="user-settings.js?v=20261108-admin1" defer></script>
 <script src="account-admin.js?v=20261108-admin1" defer></script>
-<script src="app.js?v=20261108-admin1" defer></script>
+<script src="app.js?v=20261108-admin2" defer></script>
 </body></html>

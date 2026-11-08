@@ -43,7 +43,9 @@ function dateValue(array $data,string $key): ?string {
 }
 function csrf(): void {
     $provided=(string)($_SERVER['HTTP_X_CSRF_TOKEN']??$_POST['csrf']??'');
-    if(!$provided||!hash_equals($_SESSION['csrf']??'',$provided))fail('Bezpečnostní token vypršel. Obnov stránku.',403);
+    if (!$provided || !hash_equals($_SESSION['csrf']??'',$provided)) {
+        reply(['ok'=>false,'code'=>'csrf_expired','error'=>'Bezpečnostní token vypršel. Obnov stránku.'],403);
+    }
 }
 function belongs(PDO $db,int $uid,int $contactId): void {
     $q=$db->prepare('SELECT 1 FROM contacts WHERE id=? AND user_id=?'); $q->execute([$contactId,$uid]);
