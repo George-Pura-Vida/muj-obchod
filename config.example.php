@@ -4,4 +4,9 @@
 // Soubor config.local.php NIKDY nenahrávej na veřejný GitHub.
 return [
     'setup_key' => 'CHANGE_ME',
+    // Kanonická HTTPS adresa aplikace (včetně podadresáře, pokud existuje).
+    // Používá se pro odkazy k nastavení hesla.
+    'public_url' => '',
+    // Ověřená odesílací adresa na hostingu. Prázdná hodnota vypne obnovu e-mailem.
+    'reset_from' => '',
 ];

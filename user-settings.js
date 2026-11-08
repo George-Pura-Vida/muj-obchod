@@ -1,6 +1,5 @@
 'use strict';
 
-const DEFAULT_DISPLAY_NAME='Jiří Janoušek';
 let settingsMenuItems=[];
 let settingsMenuDraft=[];
 let settingsReturnView='overview';
@@ -13,7 +12,7 @@ function normalizedMenuOrder(saved){
  return [...new Set(['overview',...known,...defaults])];
 }
 function applyUserPreferences(){
- const name=store.preferences?.display_name||DEFAULT_DISPLAY_NAME;
+ const name=profileDisplayName();
  const badge=name.split(/\s+/).slice(0,2).map(part=>Array.from(part)[0]).join('').toLocaleUpperCase('cs');
  ['profile-name','settings-account-name'].forEach(id=>{$(id).textContent=name;});
  ['profile-avatar','settings-avatar','header-avatar'].forEach(id=>{$(id).textContent=badge;});
@@ -30,17 +29,24 @@ function settingsStatus(id,message='',error=false){
  status.textContent=message;
 }
 function selectUserSettingsTab(tab,focus=true){
+ const selected=document.querySelector('[data-settings-tab="'+tab+'"]');
+ if(!selected||selected.hidden)return;
+ if(tab!=='appearance')applyAppearance(appearance);
+ if(tab!=='users')clearResetLink();
  document.querySelectorAll('[data-settings-tab]').forEach(button=>{
   if(button.dataset.settingsTab===tab)button.setAttribute('aria-current','page');
   else button.removeAttribute('aria-current');
+  $('settings-'+button.dataset.settingsTab+'-panel').hidden=button.dataset.settingsTab!==tab;
  });
- ['menu','profile'].forEach(id=>{$('settings-'+id+'-panel').hidden=id!==tab;});
+ if(tab==='appearance')openAppearance();
+ if(tab==='users')loadAdminUsers();
+ if(tab==='audit')loadAudit();
  if(focus)$('settings-'+tab+'-panel').querySelector('h1').focus();
 }
 function beginUserSettings(previousView){
  settingsReturnView=previousView;
  settingsMenuDraft=normalizedMenuOrder(store.preferences?.menu_order);
- $('settings-display-name').value=store.preferences?.display_name||DEFAULT_DISPLAY_NAME;
+ $('settings-display-name').value=profileDisplayName().slice(0,80);
  settingsStatus('settings-menu-status');
  settingsStatus('settings-profile-status');
  selectUserSettingsTab('menu',false);
@@ -50,7 +56,7 @@ function renderSettingsMenu(){
  const locked=id=>id==='overview';
  $('settings-menu-list').innerHTML=settingsMenuDraft.map((id,index)=>{
   const item=settingsMenuItems.find(entry=>entry.id===id);
-  const label=esc(item.label);
+  const label=esc(menuLabel(item.id));
   return '<li data-menu-item="'+id+'" tabindex="-1"'+(!locked(id)&&!settingsMenuSaving?' draggable="true"':'')+
    ' class="settings-menu-row'+(locked(id)?' locked':'')+'"><svg aria-hidden="true"><use href="'+esc(item.icon)+'"/></svg>'+
    '<span>'+label+'</span>'+
@@ -72,14 +78,15 @@ function reportSettingsMove(id,direction){
   const button=row.querySelector('[data-menu-move="'+direction+'"]:not(:disabled)');
   (button||row).focus();
  }
- settingsStatus('settings-menu-status',item.label+' přesunuto na pozici '+(settingsMenuDraft.indexOf(id)+1)+'.');
+ settingsStatus('settings-menu-status',menuLabel(item.id)+' přesunuto na pozici '+(settingsMenuDraft.indexOf(id)+1)+'.');
 }
 function installUserSettings(){
  const list=$('settings-menu-list');
- settingsMenuItems=[...$('side-nav').querySelectorAll('[data-view]')].map(button=>({
-  id:button.dataset.view,button,icon:button.querySelector('use').getAttribute('href'),
-  label:[...button.childNodes].filter(node=>node.nodeType===Node.TEXT_NODE).map(node=>node.textContent).join('').trim()
- }));
+ settingsMenuItems=[...$('side-nav').querySelectorAll('[data-view]')].map(button=>{
+  const labelNode=[...button.childNodes].find(node=>node.nodeType===Node.TEXT_NODE&&node.textContent.trim());
+  return {id:button.dataset.view,button,icon:button.querySelector('use').getAttribute('href'),
+   label:labelNode.textContent.trim(),labelNode};
+ });
  $('settings-back').addEventListener('click',()=>{
   go(settingsReturnView);
   $('header-avatar').focus();

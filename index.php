@@ -1,6 +1,7 @@
 <?php
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
+header('Cache-Control: no-cache');
 ?>
 <!doctype html>
 <html lang="cs">
@@ -12,7 +13,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <link rel="icon" type="image/svg+xml" href="favicon.svg?v=20261107jj2">
 <meta name="application-name" content="Moje schůzka">
 <meta name="apple-mobile-web-app-title" content="Moje schůzka">
-<link rel="stylesheet" href="style.css?v=20261107-settings1">
+<link rel="stylesheet" href="style.css?v=20261108-admin1">
 </head>
 <body>
 <svg class="svg-defs" xmlns="http://www.w3.org/2000/svg"><defs>
@@ -43,7 +44,19 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <div id="boot" class="boot">Připravuji tvůj pracovní prostor…</div>
 <section id="auth" class="auth" hidden>
 <div class="auth-visual"><span class="brand-badge">jj</span><div class="auth-visual-copy"><span class="tiny-overline">DOBRÝ OBCHOD ZAČÍNÁ VZTAHEM</span><h1>Každá schůzka<br><em>má svůj příběh.</em></h1><p>Všechno na jednom místě. Jednoduše, přehledně a s radostí.</p><div class="auth-pill">📞 Kontakt <span>→</span> 🤝 Schůzka <span>→</span> ✍️ Smlouva <span>→</span> 💚 Péče</div></div></div>
-<div class="auth-panel"><div class="auth-panel-inner"><div class="brand-mini"><span class="brand-badge">jj</span><span>moje <b>schůzka</b></span></div><span class="eyebrow">VÍTEJ ZPĚT</span><h2 id="auth-title">Přihlášení</h2><p id="auth-description">Tvůj soukromý obchodní prostor.</p><form id="auth-form"><label>E-mail<input name="email" type="email" autocomplete="username" placeholder="vas@email.cz" required></label><label>Heslo<input name="password" type="password" autocomplete="current-password" placeholder="••••••••••••" minlength="12" required></label><label id="setup-row" hidden>Jednorázový instalační klíč<input name="setup_key" type="password" autocomplete="off" placeholder="Klíč nastavený na WebKitty"></label><button class="button primary wide" type="submit" id="auth-submit">Přihlásit se <svg><use href="#i-arrow"/></svg></button><p class="error" id="auth-error" role="alert"></p></form><p id="auth-help" class="muted small">Účet je přístupný pouze oprávněnému správci.</p></div></div>
+<div class="auth-panel"><div class="auth-panel-inner"><div class="brand-mini"><span class="brand-badge">jj</span><span>moje <b>schůzka</b></span></div><span class="eyebrow">VÍTEJ ZPĚT</span><h2 id="auth-title">Přihlášení</h2><p id="auth-description">Tvůj soukromý obchodní prostor.</p><form id="auth-form"><label>E-mail<input name="email" type="email" autocomplete="username" placeholder="vas@email.cz" required></label><label>Heslo<input name="password" type="password" autocomplete="current-password" placeholder="••••••••••••" required></label><label id="setup-row" hidden>Jednorázový instalační klíč<input name="setup_key" type="password" autocomplete="off" placeholder="Klíč nastavený na WebKitty"></label><button class="button primary wide" type="submit" id="auth-submit">Přihlásit se <svg><use href="#i-arrow"/></svg></button><p class="error" id="auth-error" role="alert"></p></form><button type="button" class="text-link" id="forgot-password" hidden>Zapomenuté heslo?</button>
+<form id="reset-request-form" hidden>
+  <label>Přihlašovací e-mail<input name="email" type="email" autocomplete="username" maxlength="254" required></label>
+  <button class="button primary wide">Poslat odkaz</button>
+</form>
+<form id="reset-redeem-form" hidden>
+  <label>Nové heslo<input name="password" type="password" autocomplete="new-password" minlength="12" required></label>
+  <label>Nové heslo znovu<input name="confirm" type="password" autocomplete="new-password" minlength="12" required></label>
+  <button class="button primary wide">Nastavit heslo</button>
+</form>
+<button type="button" class="text-link" id="reset-back" hidden>← Zpět k přihlášení</button>
+<p id="reset-status" class="settings-status" role="status"></p>
+<p id="auth-help" class="muted small">Přístup k pracovnímu prostoru ti založí správce.</p></div></div>
 </section>
 <div id="app" class="app" hidden>
 <div class="shade" id="shade" hidden></div>
@@ -58,7 +71,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <button class="nav-item" data-view="coaching"><svg><use href="#i-check"/></svg> Můj trénink</button>
 <button class="nav-item" data-view="team"><svg><use href="#i-branch"/></svg> Tým a spolupráce</button>
 </nav>
-<div class="side-bottom"><div class="motivation">Malé kroky.<br><strong>Velké vztahy.</strong><span>✦</span></div><button class="subtle-action" id="import-action"><svg><use href="#i-upload"/></svg> Import kontaktů</button><button class="subtle-action" id="export-action"><svg><use href="#i-download"/></svg> Export Excel / CSV</button><button class="subtle-action" id="backup-action"><svg><use href="#i-download"/></svg> Záloha zápisů JSON</button><button class="subtle-action" id="user-settings-open" data-view="settings"><svg><use href="#i-settings"/></svg> Nastavení uživatele</button><div class="side-profile"><div class="avatar" id="profile-avatar">JJ</div><div><strong id="profile-name">Jiří Janoušek</strong><small>Osobní účet</small></div><button id="logout" title="Odhlásit se">↪</button></div></div></aside>
+<div class="side-bottom"><div class="motivation">Malé kroky.<br><strong>Velké vztahy.</strong><span>✦</span></div><button class="subtle-action" id="import-action"><svg><use href="#i-upload"/></svg> Import kontaktů</button><button class="subtle-action" id="export-action"><svg><use href="#i-download"/></svg> Export Excel / CSV</button><button class="subtle-action" id="backup-action"><svg><use href="#i-download"/></svg> Záloha zápisů JSON</button><button class="subtle-action" id="user-settings-open" data-view="settings"><svg><use href="#i-settings"/></svg> Nastavení uživatele</button><div class="side-profile"><div class="avatar" id="profile-avatar">JJ</div><div><strong id="profile-name">Jiří Janoušek</strong><small id="profile-role">Osobní účet</small></div><button id="logout" title="Odhlásit se">↪</button></div></div></aside>
 <div class="main-wrap"><header class="topbar"><button class="hamburger" id="hamburger" aria-label="Otevřít nabídku" aria-expanded="false"><svg><use href="#i-menu"/></svg></button><div class="top-brand-mobile">moje <b>schůzka</b></div><div class="top-breadcrumb">PRACOVNÍ PROSTOR <span>/</span> <strong id="crumb">Přehled</strong></div><div class="header-right"><span class="date" id="date-now"></span><button class="avatar avatar-small header-settings" id="header-avatar" data-view="settings" type="button" title="Nastavení uživatele" aria-label="Nastavení uživatele">JJ</button></div></header>
 <main class="content">
 <section class="view" id="overview-view">
@@ -140,17 +153,22 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
     <div class="settings-profile">
       <div class="avatar" id="settings-avatar" aria-hidden="true">JJ</div>
       <strong id="settings-account-name">Jiří Janoušek</strong>
-      <small>Osobní účet</small>
+      <small id="settings-role">Osobní účet</small>
     </div>
     <nav aria-label="Sekce nastavení">
       <span class="settings-nav-label">OSOBNÍ ÚČET</span>
       <button type="button" data-settings-tab="profile"><svg aria-hidden="true"><use href="#i-users"/></svg> Základní údaje</button>
+      <button type="button" data-settings-tab="password">Změna hesla</button>
       <span class="settings-nav-label">PRACOVNÍ PROSTŘEDÍ</span>
       <button type="button" data-settings-tab="menu" aria-current="page"><svg aria-hidden="true"><use href="#i-menu"/></svg> Nastavení menu</button>
+      <span class="settings-nav-label" data-admin-only hidden>ADMINISTRACE</span>
+      <button type="button" data-settings-tab="appearance" data-admin-only hidden>Vzhled a názvy menu</button>
+      <button type="button" data-settings-tab="users" data-admin-only hidden>Uživatelé a oprávnění</button>
+      <button type="button" data-settings-tab="audit" data-admin-only hidden>Audit</button>
     </nav>
   </aside>
   <div class="settings-main">
-    <header class="settings-top"><button type="button" class="settings-back" id="settings-back">← Zpět do Moje schůzka</button></header>
+    <header class="settings-top"><button type="button" class="settings-back" id="settings-back">← Zpět do Moje schůzka</button><button type="button" class="settings-back" id="settings-logout">Odhlásit se</button></header>
     <section class="settings-panel" id="settings-menu-panel">
       <h1 tabindex="-1">Nastavení menu</h1>
       <p>Přetáhni agendy nebo je přesuň šipkami. Přehled zůstává první.</p>
@@ -169,9 +187,75 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
       <form id="settings-profile-form" class="settings-profile-form">
         <label>Zobrazované jméno<input name="display_name" id="settings-display-name" autocomplete="name" maxlength="80" required></label>
         <label>Přihlašovací e-mail<input id="settings-email" type="email" readonly></label>
+        <dl id="settings-account-details" class="account-details"></dl>
         <button class="button primary" type="submit" id="settings-profile-save">Uložit jméno</button>
         <p class="settings-status" id="settings-profile-status" role="status"></p>
       </form>
+    </section>
+    <section class="settings-panel" id="settings-password-panel" hidden>
+      <h1 tabindex="-1">Změna hesla</h1>
+      <p>Po změně hesla se ostatní relace odhlásí.</p>
+      <form id="settings-password-form" class="settings-profile-form">
+        <label>Současné heslo<input name="current_password" type="password" autocomplete="current-password" required></label>
+        <label>Nové heslo<input name="password" type="password" autocomplete="new-password" minlength="12" required></label>
+        <label>Nové heslo znovu<input name="confirm" type="password" autocomplete="new-password" minlength="12" required></label>
+        <button class="button primary">Změnit heslo</button>
+        <p class="settings-status" id="settings-password-status" role="status"></p>
+      </form>
+    </section>
+    <section class="settings-panel" id="settings-appearance-panel" hidden>
+      <h1 tabindex="-1">Vzhled a názvy menu</h1>
+      <p>Změny se v náhledu projeví hned. Po uložení platí pro všechny účty.</p>
+      <div class="appearance-preview" id="appearance-preview" aria-label="Živý náhled">
+        <aside id="appearance-preview-menu"></aside>
+        <div><strong>Ukázka pracovního prostoru</strong><p>Takto bude vypadat text v aplikaci.</p><span>Ukázkové tlačítko</span></div>
+      </div>
+      <form id="settings-appearance-form" class="admin-form">
+        <fieldset><legend>Barvy</legend><div class="admin-grid" id="appearance-colors"></div></fieldset>
+        <label>Velikost písma <output id="appearance-font-output">100 %</output>
+          <input type="range" name="font_size" min="85" max="130" value="100">
+        </label>
+        <fieldset><legend>Názvy položek menu</legend><div class="admin-grid" id="appearance-labels"></div></fieldset>
+        <div class="settings-actions"><button class="button primary">Uložit vzhled</button>
+          <button type="button" class="button outline" id="appearance-defaults">Obnovit výchozí</button></div>
+        <p class="settings-status" id="settings-appearance-status" role="status"></p>
+      </form>
+    </section>
+    <section class="settings-panel" id="settings-users-panel" hidden>
+      <h1 tabindex="-1">Uživatelé a oprávnění</h1>
+      <p>Vyber účet k úpravě nebo přidej nový. Heslo se nastavuje jednorázovým odkazem.</p>
+      <div class="settings-actions">
+        <label>Účet <select id="admin-account-select"></select></label>
+        <button type="button" class="button outline" id="admin-account-new">Nový účet</button>
+      </div>
+      <form id="admin-account-form" class="admin-form" hidden>
+        <div class="admin-grid" id="admin-profile-fields"></div>
+        <div class="admin-grid">
+          <label>Role <select name="role" required></select></label>
+          <label class="check-field"><input name="active" type="checkbox"> Aktivní účet</label>
+        </div>
+        <p class="muted" id="admin-role-description"></p>
+        <div id="admin-permissions">
+          <fieldset><legend>Přístup k obrazovkám</legend><div id="admin-screens" class="admin-grid"></div></fieldset>
+          <fieldset><legend>Oprávnění k akcím</legend><div id="admin-rights" class="admin-grid"></div></fieldset>
+        </div>
+        <div class="settings-actions">
+          <button class="button primary">Uložit účet</button>
+          <button type="button" class="button outline" id="admin-issue-reset" hidden>Vytvořit odkaz k nastavení hesla</button>
+        </div>
+        <p class="settings-status" id="settings-users-status" role="status"></p>
+        <label id="admin-reset-result" hidden>Jednorázový odkaz platný 30 minut. Předej ho vlastníkovi účtu bezpečnou cestou.
+          <input id="admin-reset-link" readonly autocomplete="off">
+        </label>
+      </form>
+      <p class="settings-status" id="admin-load-status" role="status"></p>
+    </section>
+    <section class="settings-panel" id="settings-audit-panel" hidden>
+      <h1 tabindex="-1">Audit</h1>
+      <p>Posledních 150 událostí, čas v UTC.</p>
+      <p class="settings-status" id="settings-audit-status" role="status"></p>
+      <div class="admin-audit-table"><table><thead><tr><th>Čas</th><th>Událost</th><th>Provedl</th><th>Účet</th><th>Podrobnosti</th></tr></thead>
+        <tbody id="admin-audit-rows"></tbody></table></div>
     </section>
   </div>
 </section>
@@ -214,6 +298,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 <script src="xlsx.full.min.js?v=1" defer></script>
 <script src="conversation-guide.js?v=20261107-settings1" defer></script>
 <script src="workspace.js?v=20261107-settings1" defer></script>
-<script src="user-settings.js?v=20261107-settings1" defer></script>
-<script src="app.js?v=20261107-settings1" defer></script>
+<script src="user-settings.js?v=20261108-admin1" defer></script>
+<script src="account-admin.js?v=20261108-admin1" defer></script>
+<script src="app.js?v=20261108-admin1" defer></script>
 </body></html>

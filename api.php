@@ -3,16 +3,22 @@ declare(strict_types=1);
 header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store');
 header('Referrer-Policy: same-origin');
-ini_set('session.use_strict_mode', '1');
-$secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+require __DIR__.'/account-admin.php';
+ini_set('display_errors','0');
+ini_set('session.use_strict_mode','1');
+ini_set('session.use_only_cookies','1');
+ini_set('session.use_trans_sid','0');
+$secure = in_array(strtolower((string)($_SERVER['HTTPS'] ?? '')),['on','1'],true);
+$local = PHP_SAPI === 'cli-server' && in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1','::1'],true);
+if (!$secure && !$local) fail('Přístup je dostupný pouze přes HTTPS.',403);
 session_name('moje_schuzka_sid');
 session_set_cookie_params(['lifetime'=>0, 'path'=>'/', 'secure'=>$secure, 'httponly'=>true, 'samesite'=>'Lax']);
-session_start();
+if (!session_start()) fail('Relaci nelze spustit.',503);
 $_SESSION['csrf'] ??= bin2hex(random_bytes(24));
 
 function reply(array $value, int $status=200): never {
     http_response_code($status); header('Content-Type: application/json; charset=UTF-8');
-    echo json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); exit;
+    echo json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE); exit;
 }
 function fail(string $message, int $status=400): never { reply(['ok'=>false, 'error'=>$message],$status); }
 function body(): array {
@@ -39,14 +45,9 @@ function csrf(): void {
     $provided=(string)($_SERVER['HTTP_X_CSRF_TOKEN']??$_POST['csrf']??'');
     if(!$provided||!hash_equals($_SESSION['csrf']??'',$provided))fail('Bezpečnostní token vypršel. Obnov stránku.',403);
 }
-function currentUser(): int { $id=(int)($_SESSION['uid']??0); if(!$id)fail('Pro tuto akci se přihlas.',401);return $id; }
 function belongs(PDO $db,int $uid,int $contactId): void {
     $q=$db->prepare('SELECT 1 FROM contacts WHERE id=? AND user_id=?'); $q->execute([$contactId,$uid]);
     if(!$q->fetchColumn())fail('Klient nebyl nalezen.',404);
-}
-function existsOwner(PDO $db,string $table,int $id,int $uid): bool {
-    $q=$db->prepare("SELECT 1 FROM $table WHERE id=? AND user_id=?");
-    $q->execute([$id,$uid]); return (bool)$q->fetchColumn();
 }
 function setStage(PDO $db,int $uid,int $cid,string $stage): void {
     $db->prepare('UPDATE contacts SET stage=? WHERE id=? AND user_id=?')->execute([$stage,$cid,$uid]);
@@ -66,7 +67,18 @@ function nextCareDate(string $date,int $months): string {
     return $target->setDate((int)$target->format('Y'),(int)$target->format('n'),
         min((int)$from->format('j'),(int)$target->format('t')))->format('Y-m-d');
 }
-$action=(string)($_GET['action']??'meta');
+function recordingPath(string $private,string $filename): string {
+    $folder=realpath($private.'/recordings');
+    $path=$folder ? realpath($folder.'/'.basename($filename)) : false;
+    if(!$folder||!$path||!str_starts_with($path,$folder.DIRECTORY_SEPARATOR)||!is_file($path)) {
+        fail('Záznam na serveru chybí nebo ho nelze načíst.',404);
+    }
+    return $path;
+}
+$action=$_GET['action']??'meta';
+if (!is_string($action)) fail('Neplatná akce.');
+$method=$_SERVER['REQUEST_METHOD']??'';
+if (!in_array($method,['GET','HEAD','POST'],true)) fail('Nepodporovaná metoda.',405);
 try {
     if(!extension_loaded('pdo_sqlite'))fail('Server potřebuje PHP rozšíření PDO SQLite.',503);
     $private=dirname(__DIR__).'/moje-schuzka-data';
@@ -126,41 +138,44 @@ CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
 CREATE INDEX IF NOT EXISTS idx_activities_contact ON activities(contact_id,user_id);
 CREATE INDEX IF NOT EXISTS idx_contracts_contact ON contracts(contact_id,user_id);
 CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id,user_id);");
+    migrateAccounts($db);
     $userCount=(int)$db->query('SELECT COUNT(*) FROM users')->fetchColumn();
     $cfg=is_file(__DIR__.'/config.local.php') ? require __DIR__.'/config.local.php' : [];
     if(!is_array($cfg))$cfg=[];
     $setupKey=(string)(getenv('MS_SETUP_KEY')?:($cfg['setup_key']??''));
     $setupAvailable=$userCount===0 && strlen($setupKey)>=32;
-    if($_SERVER['REQUEST_METHOD']==='POST'){
+    $account=sessionAccount($db);
+    $access=$account ? permissions($account) : null;
+    $publicActions=['register','login','reset_request','reset_redeem'];
+    if($method!=='POST' && $action==='meta'){
+        [$url,$sender]=resetConfig($cfg);
+        reply(['ok'=>true,'csrf'=>$_SESSION['csrf'],'authenticated'=>(bool)$account,'email'=>$account['email']??null,
+            'account'=>$account ? publicAccount($account) : null,'access'=>$access,
+            'can_backup'=>$access ? canBackup($access) : false,'appearance'=>$account ? getAppearance($db) : [],
+            'setup_required'=>$userCount===0,'setup_available'=>$setupAvailable,'reset_available'=>(bool)($url&&$sender)]);
+    }
+    if(in_array($action,$publicActions,true)){
+        if($method!=='POST') fail('Použij POST.',405);
+        csrf();
+        handleAccountAuth($db,$action,body(),$cfg,$setupAvailable,$setupKey);
+    }
+    if(!$account) fail('Pro tuto akci se přihlas.',401);
+    $uid=(int)$account['id'];
+    if($method==='POST'){
         csrf();
         $data=$action==='upload' ? $_POST : body();
-        if($action==='register'){
-            if($userCount!==0)fail('Veřejná registrace je vypnutá.',403);
-            if(!$setupAvailable)fail('Nejprve nastav instalační klíč v konfiguraci na WebKitty.',403);
-            if(!hash_equals($setupKey,(string)($data['setup_key']??'')))fail('Nesprávný instalační klíč.',403);
-            $email=strtolower(val($data,'email',254)); $password=(string)($data['password']??'');
-            if(!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($password)<12)fail('Zadej platný e-mail a heslo alespoň 12 znaků.');
-            $db->beginTransaction();
-            if((int)$db->query('SELECT COUNT(*) FROM users')->fetchColumn()>0){$db->rollBack();fail('Účet již existuje.');}
-            $db->prepare('INSERT INTO users(email,password_hash) VALUES(?,?)')->execute([$email,password_hash($password,PASSWORD_DEFAULT)]);
-            $_SESSION['uid']=(int)$db->lastInsertId();session_regenerate_id(true); $db->commit();
-            reply(['ok'=>true,'email'=>$email]);
+        if($action==='logout'){
+            audit($db,'logout',$uid,$uid);
+            $_SESSION=[];
+            $params=session_get_cookie_params();
+            setcookie(session_name(),'', ['expires'=>1,'path'=>$params['path'],'secure'=>$params['secure'],
+                'httponly'=>true,'samesite'=>'Lax']);
+            session_destroy();
+            reply(['ok'=>true]);
         }
-        if($action==='login'){
-            $email=strtolower(val($data,'email',254));$password=(string)($data['password']??'');
-            $identity=hash('sha256',$email.'|'.($_SERVER['REMOTE_ADDR']??'unknown'));
-            $t=$db->prepare('SELECT failed,last_try FROM login_attempts WHERE identity=?');$t->execute([$identity]);$attempt=$t->fetch();
-            if($attempt && (int)$attempt['failed']>=5 && time()-(int)$attempt['last_try']<900) fail('Příliš mnoho pokusů. Zkus to za 15 minut.',429);
-            $u=$db->prepare('SELECT id,password_hash FROM users WHERE email=?');$u->execute([$email]);$account=$u->fetch();
-            if(!$account||!password_verify($password,$account['password_hash'])){
-                $db->prepare('INSERT INTO login_attempts(identity,failed,last_try) VALUES(?,1,?) ON CONFLICT(identity) DO UPDATE SET failed=CASE WHEN excluded.last_try-login_attempts.last_try>900 THEN 1 ELSE login_attempts.failed+1 END,last_try=excluded.last_try')->execute([$identity,time()]);
-                fail('Nesprávný e-mail nebo heslo.',401);
-            }
-            $db->prepare('DELETE FROM login_attempts WHERE identity=?')->execute([$identity]);
-            session_regenerate_id(true); $_SESSION['uid']=(int)$account['id']; reply(['ok'=>true]);
-        }
-        if($action==='logout'){$_SESSION=[];session_regenerate_id(true);reply(['ok'=>true]);}
-        $uid=currentUser();
+        if($action==='password_change') changePassword($db,$account,$data);
+        if(str_starts_with($action,'admin_')) handleAdmin($db,$action,$account,$data,$cfg);
+        authorizeWrite($access,$action,$data);
         if($action==='contact'){
             $id=(int)($data['id']??0);
             $first=val($data,'first_name',100);$last=val($data,'last_name',100);
@@ -169,8 +184,25 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
             $stage=val($data,'stage',30);
             if(!in_array($stage,['contact','phone','meeting1','meeting2','contract','care'],true))$stage='contact';
             $months=(int)($data['care_months']??3);if($months<1||$months>24)$months=3;
-            $collaboration=array_key_exists('collaboration_stage',$data)?collaborationStage($data):null;
-            $args=[$first,$last,val($data,'phone',70),$email,val($data,'address',400),val($data,'source',200),val($data,'notes',5000),$stage,$months,dateValue($data,'next_care')];
+            $collaboration=null;
+            if (array_key_exists('collaboration_stage',$data)) {
+                $collaboration=collaborationStage($data);
+                if (!$access['actions']['team_activity']) {
+                    if ($collaboration!=='') requireRight($access,'team_activity');
+                    $collaboration=null;
+                }
+            }
+            $nextCare=dateValue($data,'next_care');
+            if (!$access['actions']['care_activity']) {
+                if ($nextCare || $months!==3) requireRight($access,'care_activity');
+                if ($id) {
+                    $q=$db->prepare('SELECT care_months,next_care FROM contacts WHERE id=? AND user_id=?');
+                    $q->execute([$id,$uid]);
+                    $priorCare=$q->fetch();
+                    if ($priorCare) { $months=$priorCare['care_months']; $nextCare=$priorCare['next_care']; }
+                }
+            }
+            $args=[$first,$last,val($data,'phone',70),$email,val($data,'address',400),val($data,'source',200),val($data,'notes',5000),$stage,$months,$nextCare];
             if($id)belongs($db,$uid,$id);
             $db->beginTransaction();
             if($id){
@@ -201,6 +233,12 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
             if(!$nextAt&&($nextKind!==''||$nextTime!==''||$nextNote!==''))fail('K dalšímu kroku doplň datum.');
             $from=$data['followup_from_id']??null;
             if($from!==null && !($from=filter_var($from,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]])))fail('Neplatný odkaz na předchozí aktivitu.');
+            if ($from!==null) {
+                $source=requireActivity($db,$uid,$from,$access,true);
+                $step=stepScope($source['next_kind'] ?? '');
+                if (!$access['screens'][$step]) fail('Tento další krok není dostupný.',403);
+                requireRight($access,['day'=>'activity','care'=>'care_activity','team'=>'team_activity'][$step]);
+            }
             $collaboration=collaborationStage($data);
             $frequency=null;
             if(($data['care_frequency']??'')!==''){
@@ -271,7 +309,7 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
             reply(['ok'=>true,'id'=>$id]);
         }
         if($action==='review'){
-            $id=(int)($data['id']??0);if(!existsOwner($db,'activities',$id,$uid))fail('Zápis nenalezen.',404);
+            $id=(int)($data['id']??0);requireActivity($db,$uid,$id,$access);
             $db->prepare('UPDATE activities SET transcript=?,review=? WHERE id=? AND user_id=?')->execute([val($data,'transcript',120000),val($data,'review',20000),$id,$uid]);reply(['ok'=>true]);
         }
         if($action==='coaching_scorecard'){
@@ -287,6 +325,7 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
                 $scores[$skill]=$score;
             }
             if(!$scores)fail('Ohodnoť alespoň jednu dovednost.');
+            requireActivity($db,$uid,$id,$access);
             $q=$db->prepare("INSERT INTO coaching_scorecards(activity_id,scores,practice)
                 SELECT id,?,? FROM activities
                 WHERE id=? AND user_id=? AND kind IN ('phone','meeting1','meeting2','meeting')
@@ -353,7 +392,7 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         }
         if($action==='upload'){
             $aid=(int)($data['activity_id']??0);
-            if(!existsOwner($db,'activities',$aid,$uid))fail('Nejdřív ulož zápis ke schůzce.',404);
+            requireActivity($db,$uid,$aid,$access);
             $f=$_FILES['audio']??null;
             if(!$f||!is_uploaded_file($f['tmp_name']??'')||($f['error']??1)!==UPLOAD_ERR_OK)fail('Nahrávku se nepodařilo přijmout.');
             if($f['size']<=0||$f['size']>50*1024*1024)fail('Nahrávka musí být menší než 50 MB.');
@@ -370,15 +409,19 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         }
         fail('Neznámá akce.',404);
     }
-    if($action==='meta'){
-        $email=null;
-        if(!empty($_SESSION['uid'])){$q=$db->prepare('SELECT email FROM users WHERE id=?');$q->execute([$_SESSION['uid']]);$email=$q->fetchColumn()?:null;}
-        reply(['ok'=>true,'csrf'=>$_SESSION['csrf'],'authenticated'=>(bool)$email,'email'=>$email,'setup_required'=>$userCount===0,'setup_available'=>$setupAvailable]);
-    }
-    $uid=currentUser();
-    if($action==='state'||$action==='backup'){
+    if(str_starts_with($action,'admin_')) handleAdmin($db,$action,$account,null,$cfg);
+    if($action==='state'||$action==='backup'||$action==='export'){
+        if($action==='backup' && !canBackup($access)) fail('K úplné záloze nemáš oprávnění.',403);
+        if($action==='export') requireRight($access,'export');
+        if($action!=='state') audit($db,$action,$uid,$uid);
+        $screens=$access['screens'];
+        $hasContacts=(bool)array_filter($screens);
+        $tables=['contacts'=>$hasContacts,'activities'=>$hasContacts,'contracts'=>$screens['results'],
+            'opportunities'=>$screens['results'],'referrals'=>$screens['care'],'recordings'=>$access['actions']['media']];
         $data=[];
-        foreach(['contacts','activities','contracts','opportunities','referrals','recordings'] as $table){
+        foreach($tables as $table=>$allowed){
+            $data[$table]=[];
+            if (!$allowed) continue;
             $sql=match($table){
                 'contacts'=>'SELECT c.*,p.stage AS collaboration_stage FROM contacts c LEFT JOIN collaboration_profiles p ON p.contact_id=c.id WHERE c.user_id=? ORDER BY c.id DESC',
                 'activities'=>'SELECT a.*,d.opening,d.findings,d.summary,d.result_status,d.next_kind,d.next_time,d.next_note,d.followup_activity_id,g.topic_notes,g.referral_intro,g.context AS conversation_context
@@ -388,17 +431,42 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
             };
             $q=$db->prepare($sql);$q->execute([$uid]);$data[$table]=$q->fetchAll();
         }
-        foreach($data['recordings'] as &$record)unset($record['filename']);unset($record);
-        foreach($data['activities'] as &$activity)$activity['topic_notes']=json_decode($activity['topic_notes']??'null',true);
+        foreach($data['contacts'] as &$contact){
+            if (!$screens['people']) {
+                $fields=['id','stage'];
+                if ($screens['day']||$screens['care']||$screens['coaching']||$screens['team']||$screens['results']) {
+                    $fields=[...$fields,'first_name','last_name'];
+                }
+                $contact=array_intersect_key($contact,array_flip([...$fields,'next_care','care_months','collaboration_stage']));
+            }
+            if (!$screens['care']) unset($contact['next_care'],$contact['care_months']);
+            if (!$screens['team']) unset($contact['collaboration_stage']);
+        }
+        unset($contact);
+        foreach($data['activities'] as &$activity) {
+            $activity['topic_notes']=json_decode($activity['topic_notes']??'null',true);
+            $activity=activityForState($activity,$screens);
+        }
         unset($activity);
-        $q=$db->prepare('SELECT s.activity_id,s.scores,s.practice FROM coaching_scorecards s JOIN activities a ON a.id=s.activity_id WHERE a.user_id=?');
-        $q->execute([$uid]);
-        $data['scorecards']=$q->fetchAll();
-        foreach($data['scorecards'] as &$card)$card['scores']=json_decode($card['scores'],true);
-        unset($card);
-        $q=$db->prepare('SELECT scenario,response,score,created_at FROM practice_sessions WHERE user_id=? ORDER BY id DESC');
-        $q->execute([$uid]);
-        $data['practice_sessions']=$q->fetchAll();
+        $data['activities']=array_values(array_filter($data['activities']));
+        $visibleActivityIds=array_fill_keys(array_column($data['activities'],'id'),true);
+        $data['recordings']=array_values(array_filter($data['recordings'],
+            fn($record)=>isset($visibleActivityIds[$record['activity_id']])));
+        foreach($data['recordings'] as &$record)unset($record['filename']);unset($record);
+        $data['scorecards']=[];
+        $data['practice_sessions']=[];
+        if ($screens['coaching']) {
+            $q=$db->prepare('SELECT s.activity_id,s.scores,s.practice FROM coaching_scorecards s JOIN activities a ON a.id=s.activity_id WHERE a.user_id=?');
+            $q->execute([$uid]);
+            foreach ($q->fetchAll() as $card) {
+                if (!isset($visibleActivityIds[$card['activity_id']])) continue;
+                $card['scores']=json_decode($card['scores'],true);
+                $data['scorecards'][]=$card;
+            }
+            $q=$db->prepare('SELECT scenario,response,score,created_at FROM practice_sessions WHERE user_id=? ORDER BY id DESC');
+            $q->execute([$uid]);
+            $data['practice_sessions']=$q->fetchAll();
+        }
         $q=$db->prepare('SELECT display_name,menu_order FROM user_preferences WHERE user_id=?');
         $q->execute([$uid]);
         $preferences=$q->fetch();
@@ -409,15 +477,14 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
     // JSON fallback for hosting layers that replace binary PHP responses with HTML.
     // Each authenticated chunk is limited to 512 KiB and belongs to the session owner.
     if($action==='media_chunk'){
+        requireRight($access,'media');
         $id=filter_input(INPUT_GET,'id',FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
         if(!is_int($id))fail('Neplatné ID nahrávky.',400);
-        $q=$db->prepare('SELECT filename FROM recordings WHERE id=? AND user_id=?');
+        $q=$db->prepare('SELECT filename,activity_id FROM recordings WHERE id=? AND user_id=?');
         $q->execute([$id,$uid]);$record=$q->fetch();
         if(!$record)fail('Nahrávka nenalezena.',404);
-        $folder=realpath($private.'/recordings');
-        $path=$folder ? realpath($folder.'/'.basename((string)$record['filename'])) : false;
-        if(!$folder||!$path||!str_starts_with($path,$folder.DIRECTORY_SEPARATOR)||!is_file($path)||!is_readable($path))
-            fail('Záznam na serveru chybí nebo ho nelze načíst.',404);
+        requireActivity($db,$uid,(int)$record['activity_id'],$access);
+        $path=recordingPath($private,$record['filename']);
         $ext=strtolower(pathinfo($path,PATHINFO_EXTENSION));
         $mimes=['webm'=>'audio/webm','mp3'=>'audio/mpeg','m4a'=>'audio/mp4','mp4'=>'audio/mp4','ogg'=>'audio/ogg','wav'=>'audio/wav','aac'=>'audio/aac'];
         if(!isset($mimes[$ext]))fail('Nepodporovaný formát.',415);
@@ -426,7 +493,7 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         $offset=filter_input(INPUT_GET,'offset',FILTER_VALIDATE_INT,['options'=>['min_range'=>0]]);
         if(!is_int($offset)||$offset>=$size)fail('Neplatná pozice čtení.',416);
         $length=min(524288,$size-$offset);
-        $handle=fopen($path,'rb');
+        $handle=@fopen($path,'rb');
         if($handle===false)fail('Záznam nelze otevřít.',503);
         if(fseek($handle,$offset)!==0){fclose($handle);fail('Záznam nelze přečíst.',503);}
         $chunk='';
@@ -441,12 +508,13 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
                'size'=>$size,'mime'=>$mimes[$ext],'bytes'=>$length,'chunk'=>base64_encode($chunk)]);
     }
     if($action==='media'){
+        requireRight($access,'media');
         $id=(int)($_GET['id']??0);
-        $q=$db->prepare('SELECT filename,mime,original_name FROM recordings WHERE id=? AND user_id=?');
+        $q=$db->prepare('SELECT filename,mime,original_name,activity_id FROM recordings WHERE id=? AND user_id=?');
         $q->execute([$id,$uid]);$record=$q->fetch();
         if(!$record)fail('Nahrávka nenalezena.',404);
-        $path=$private.'/recordings/'.basename((string)$record['filename']);
-        if(!is_file($path)||!is_readable($path))fail('Záznam na serveru chybí nebo ho nelze načíst.',404);
+        requireActivity($db,$uid,(int)$record['activity_id'],$access);
+        $path=recordingPath($private,$record['filename']);
         $size=filesize($path);
         if($size===false||$size<=0)fail('Zvukový soubor je prázdný.',404);
         $ext=strtolower(pathinfo((string)$record['filename'],PATHINFO_EXTENSION));
@@ -456,6 +524,8 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         if(!isset($knownMimes[$ext]))fail('Nepodporovaná přípona zvukového souboru.',415);
         $mime=$knownMimes[$ext];
         $from=0;$to=$size-1;$range=(string)($_SERVER['HTTP_RANGE']??'');
+        $handle=@fopen($path,'rb');
+        if($handle===false)fail('Záznam nelze otevřít.',503);
         if($range!==''){
             if(!preg_match('/^bytes=(\\d*)-(\\d*)$/D',$range,$m) || ($m[1]===''&&$m[2]==='')){
                 header('Content-Range: bytes */'.$size);fail('Neplatný rozsah zvukového souboru.',416);
@@ -479,8 +549,6 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         header('Content-Length: '.($to-$from+1));
         header('Content-Disposition: inline; filename="nahravka.'.$ext.'"');
         session_write_close();
-        $handle=fopen($path,'rb');
-        if($handle===false)exit;
         fseek($handle,$from);
         $remaining=$to-$from+1;
         while($remaining>0&&!feof($handle)){
@@ -491,6 +559,9 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         fclose($handle);exit;
     }
     if($action==='csv'){
+        requireRight($access,'export');
+        if (!$access['screens']['people']) fail('K exportu kontaktů nemáš oprávnění.',403);
+        audit($db,'csv',$uid,$uid);
         header('Content-Type: text/csv; charset=UTF-8');
         header('Content-Disposition: attachment; filename="moje-schuzka-kontakty.csv"');
         echo "\xEF\xBB\xBF";$out=fopen('php://output','w');
@@ -501,6 +572,7 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
     }
     fail('Neznámá akce.',404);
 } catch(Throwable $e){
-    error_log('Moje schůzka: '.$e->getMessage());
+    if (isset($db) && $db->inTransaction()) $db->rollBack();
+    error_log('Moje schůzka: '.$e::class.' ['.$e->getCode().'] '.$e->getFile().':'.$e->getLine());
     fail('Chyba serveru. Zkontroluj PHP, SQLite a oprávnění úložiště.',500);
 }
