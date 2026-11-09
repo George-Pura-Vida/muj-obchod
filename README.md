@@ -40,3 +40,7 @@ Kontakty: CSV export a import (Excel otevře a uloží CSV UTF-8). V prohlíže�
 Hesla se ukládají jako PHP hashe a v databázi je pouze hash jednorázového tokenu. Zápisové požadavky ověřují CSRF. Přihlášení a obnova mají limity pokusů. Relace používají Secure, HttpOnly a SameSite cookies a končí po 30 minutách nečinnosti nebo 12 hodinách od přihlášení. Audit neukládá hesla ani odkazy k obnově.
 
 © 2026 Jiří Janoušek.
+
+## Dobrovolná podpora projektu
+
+Veřejná stránka `support.html` zobrazuje QR platbu s volitelným jednorázovým potvrzením e-mailem a anonymní možností. V přihlašovací obrazovce i postranním panelu je odkaz „Podpořit projekt“. E-mailové požadavky se přes CORS posílají na `https://muj-dip.jirijanousek.cz/donation-intent-cross.php`, kde se ukládá požadavek s unikátním VS. Teprve po bankovním spárování v centrálním Fio cron skriptu odchází jednorázové poděkování dárci a oznámení správci. Pro fungování musí být nejprve nasazena nová verze `George-Pura-Vida/muj-dip` a běžet jeho cron. Žádné tokeny Fio ani soukromá data zde neskladovat. Živou platbu ověřit po nasazení na WebKitty.
