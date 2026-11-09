@@ -12,21 +12,21 @@ test('QR platba a jedinečný variabilní symbol',()=>{
   assert.equal(mod.amountInHellers('250'),25000);
   assert.throws(()=>mod.amountInHellers('0.50'));
   assert.throws(()=>mod.amountInHellers('250*CC:EUR'));
-  assert.match(mod.paymentDescriptor('250','12345678'),/\\*AM:250\\.00\\*CC:CZK\\*X-VS:12345678/);
+  assert.ok(mod.paymentDescriptor('250','12345678').includes('*AM:250.00*CC:CZK*X-VS:12345678'));
   assert.doesNotMatch(mod.paymentDescriptor('250'),/X-VS/);
   assert.throws(()=>mod.paymentDescriptor('250','badVS'));
   assert.match(mod.payment.message,/MŮJ OBCHOD/);
 });
 
 test('Formulář obsahuje všechny používané DOM prvky a souhlas',()=>{
-  const ids=[...script.matchAll(/getElementById\\('([^']+)'\\)/g)].map(m=>m[1]);
+  const ids=[...script.matchAll(/getElementById\('([^']+)'\)/g)].map(m=>m[1]);
   for(const id of ids) assert.ok(html.includes('id="'+id+'"'),'Chybí #'+id);
   assert.match(html,/id="donorConsent"/);
   assert.match(html,/id="prepareAnonymous"/);
 });
 
 test('Platební požadavek vzniká výhradně na centrálním serveru',()=>{
-  assert.match(script,/https:\\/\\/muj-dip\\.jirijanousek\\.cz\\/donation-intent-cross\\.php/);
+  assert.ok(script.includes('https://muj-dip.jirijanousek.cz/donation-intent-cross.php'));
   assert.match(script,/credentials:'omit'/);
   assert.match(script,/acknowledge:true/);
   assert.doesNotMatch(script,/FIO_TOKEN|fio-token|secret/i);
