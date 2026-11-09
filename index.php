@@ -56,7 +56,7 @@ header('Cache-Control: no-cache');
 </form>
 <button type="button" class="text-link" id="reset-back" hidden>← Zpět k přihlášení</button>
 <p id="reset-status" class="settings-status" role="status"></p>
-<p id="auth-help" class="muted small">Přístup k pracovnímu prostoru ti založí správce.</p></div></div>
+<p id="auth-help" class="muted small">Přístup k pracovnímu prostoru ti založí správce.</p><p class="support-auth-entry"><a href="/support.html">💛 Dobrovolně podpořit Můj obchod</a></p></div></div>
 </section>
 <div id="app" class="app" hidden>
 <div class="shade" id="shade" hidden></div>
@@ -71,7 +71,7 @@ header('Cache-Control: no-cache');
 <button class="nav-item" data-view="coaching"><svg><use href="#i-check"/></svg> Můj trénink</button>
 <button class="nav-item" data-view="team"><svg><use href="#i-branch"/></svg> Tým a spolupráce</button>
 </nav>
-<div class="side-bottom"><div class="motivation">Malé kroky.<br><strong>Velké vztahy.</strong><span>✦</span></div><button class="subtle-action" id="import-action"><svg><use href="#i-upload"/></svg> Import kontaktů</button><button class="subtle-action" id="export-action"><svg><use href="#i-download"/></svg> Export Excel / CSV</button><button class="subtle-action" id="backup-action"><svg><use href="#i-download"/></svg> Záloha zápisů JSON</button><button class="subtle-action" id="user-settings-open" data-view="settings"><svg><use href="#i-settings"/></svg> Nastavení uživatele</button><div class="side-profile"><div class="avatar" id="profile-avatar">JJ</div><div><strong id="profile-name">Jiří Janoušek</strong><small id="profile-role">Osobní účet</small></div><button id="logout" title="Odhlásit se">↪</button></div></div></aside>
+<div class="side-bottom"><div class="motivation">Malé kroky.<br><strong>Velké vztahy.</strong><span>✦</span></div><button class="subtle-action" id="import-action"><svg><use href="#i-upload"/></svg> Import kontaktů</button><button class="subtle-action" id="export-action"><svg><use href="#i-download"/></svg> Export Excel / CSV</button><button class="subtle-action" id="backup-action"><svg><use href="#i-download"/></svg> Záloha zápisů JSON</button><button class="subtle-action" id="user-settings-open" data-view="settings"><svg><use href="#i-settings"/></svg> Nastavení uživatele</button><a class="support-side-entry" href="/support.html" title="Dobrovolná podpora projektu Můj obchod">💛 Podpořit projekt</a><div class="side-profile"><div class="avatar" id="profile-avatar">JJ</div><div><strong id="profile-name">Jiří Janoušek</strong><small id="profile-role">Osobní účet</small></div><button id="logout" title="Odhlásit se">↪</button></div></div></aside>
 <div class="main-wrap"><header class="topbar"><button class="hamburger" id="hamburger" aria-label="Otevřít nabídku" aria-expanded="false"><svg><use href="#i-menu"/></svg></button><div class="top-brand-mobile">moje <b>schůzka</b></div><div class="top-breadcrumb">PRACOVNÍ PROSTOR <span>/</span> <strong id="crumb">Přehled</strong></div><div class="header-right"><span class="date" id="date-now"></span><button class="avatar avatar-small header-settings" id="header-avatar" data-view="settings" type="button" title="Nastavení uživatele" aria-label="Nastavení uživatele">JJ</button></div></header>
 <main class="content">
 <section class="view" id="overview-view">
