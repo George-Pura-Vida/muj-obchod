@@ -279,7 +279,8 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
             }
             // Optional idempotency key for DIANA and other API clients.
             // Existing UI calls without a key keep their previous behavior.
-            $requestKey=val($data,'request_key',80);
+            $requestKey=$data['request_key']??'';
+            if (!is_string($requestKey)) fail('Neplatný identifikátor zápisu.');
             if ($requestKey!=='' && !preg_match('/^[A-Za-z0-9_-]{1,80}$/D',$requestKey)) fail('Neplatný identifikátor zápisu.');
             $payloadHash=$requestKey!=='' ? hash('sha256',json_encode($data,JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE)) : '';
             $db->beginTransaction();
