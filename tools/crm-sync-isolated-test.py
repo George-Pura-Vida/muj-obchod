@@ -13,7 +13,7 @@ php=runtime/"usr/bin/php8.3"
 extension=next(runtime.glob("usr/lib/php/*/pdo_sqlite.so")).parent
 base=[str(php),"-n","-d","extension="+str(extension/"pdo.so"),"-d","extension="+str(extension/"pdo_sqlite.so")]
 worker=stage/"crm-sync.php"
-url="https://raw.githubusercontent.com/george-pura-vida/muj-obchod/fe9eab6d32c034c6be785e2badae3e4b1bcfa1d6/tools/crm-sync.php"
+url="https://raw.githubusercontent.com/george-pura-vida/muj-obchod/d4a68ac6a6138fee7e22da9edfa2bffda0960609/tools/crm-sync.php"
 worker.write_bytes(urllib.request.urlopen(url,timeout=30).read())
 lint=subprocess.run(base+["-l",str(worker)],capture_output=True,text=True)
 if lint.returncode: raise SystemExit("LINT_FAILED "+lint.stdout)
