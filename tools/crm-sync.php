@@ -26,7 +26,7 @@ function kclient(string $id,array $f): array {
     $products=[];foreach(['gold','silver','funds','bitcoin','swiss','insurance'] as $p)$products[$p]=['state'=>'verify','evidence'=>''];
     return ['id'=>$id,'firstName'=>$f['first_name'],'lastName'=>$f['last_name'],'email'=>$f['email'],'phone'=>$f['phone'],
         'group'=>'E','amount'=>0,'products'=>$products,'tradePotential'=>'','cooperationPotential'=>'','tradePriority'=>false,
-        'cooperationPriority'=>false,'sourceNote'=>'P�eneseno z M�ho obchodu; produkty a objemy nejsou dolo�eny.',
+        'cooperationPriority'=>false,'sourceNote'=>'Přeneseno z Mého obchodu; produkty a objemy nejsou doloženy.',
         'nextAction'=>'','nextContact'=>'','sourceDate'=>''];
 }
 function updateContact(PDO $db,int $oid,string $kid,array $f,string $target): void {
@@ -40,7 +40,7 @@ function updateContact(PDO $db,int $oid,string $kid,array $f,string $target): vo
 function activityBody(array $a,array $details): string {
     if(trim((string)($details['opening']??''))===''&&trim((string)($details['findings']??''))===''&&trim((string)($details['summary']??''))==='')return (string)($a['notes']??'');
     $parts=[];
-    foreach(['opening'=>'Otev�en�','notes'=>'Pr�b�h','findings'=>'Zji�t�n�','summary'=>'Shrnut�','outcome'=>'Z�v�r'] as $key=>$label){
+    foreach(['opening'=>'Otevření','notes'=>'Průběh','findings'=>'Zjištění','summary'=>'Shrnutí','outcome'=>'Závěr'] as $key=>$label){
         $value=trim((string)($a[$key]??$details[$key]??''));if($value!=='')$parts[]=$label.': '.$value;
     }
     return implode("\n\n",$parts);
@@ -83,12 +83,12 @@ function syncRun(string $root,string $owner,bool $dry,bool $fixture): array {
     try{
         $obs=[];$kms=[];$deleted=[];
         foreach(query($db,'SELECT * FROM ob.contacts WHERE user_id=?',[$uid]) as $row){
-            $f=fields($row);if($fixture&&!sameName($f,['first_name'=>'Test','last_name'=>'Test�k']))continue;
+            $f=fields($row);if($fixture&&!sameName($f,['first_name'=>'Test','last_name'=>'Testík']))continue;
             $obs[(int)$row['id']]=['fields'=>$f,'row'=>$row];
         }
         foreach(query($db,'SELECT * FROM km.clients') as $row){
             $p=json_decode($row['payload'],true,512,JSON_THROW_ON_ERROR);$f=fields($p,true);
-            if($fixture&&!sameName($f,['first_name'=>'Test','last_name'=>'Test�k']))continue;
+            if($fixture&&!sameName($f,['first_name'=>'Test','last_name'=>'Testík']))continue;
             if(($row['deleted_at']??'')!==''){$deleted[$row['id']]=$f;continue;}
             $kms[$row['id']]=['fields'=>$f,'row'=>$row];
         }
@@ -193,4 +193,3 @@ if(realpath($_SERVER['SCRIPT_FILENAME']??'')===__FILE__){
     try{echo enc(syncRun($options['root']??dirname(__DIR__,2),$options['owner']??'jgjanousek@gmail.com',isset($options['dry-run']),isset($options['fixture-only'])))."\n";}
     catch(Throwable $e){fwrite(STDERR,enc(['ok'=>false,'status'=>'blocked','error_class'=>get_class($e)])."\n");exit(1);}
 }
-
