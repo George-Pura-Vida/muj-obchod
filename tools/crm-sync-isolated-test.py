@@ -13,7 +13,7 @@ php=runtime/"usr/bin/php8.3"
 extension=next(runtime.glob("usr/lib/php/*/pdo_sqlite.so")).parent
 base=[str(php),"-n","-d","extension="+str(extension/"pdo.so"),"-d","extension="+str(extension/"pdo_sqlite.so")]
 worker=stage/"crm-sync.php"
-url="https://raw.githubusercontent.com/george-pura-vida/muj-obchod/d4a68ac6a6138fee7e22da9edfa2bffda0960609/tools/crm-sync.php"
+url="https://raw.githubusercontent.com/george-pura-vida/muj-obchod/4de62d8a0a937c841ffb9b61b6e9c9f5d5b8c44b/tools/crm-sync.php"
 worker.write_bytes(urllib.request.urlopen(url,timeout=30).read())
 lint=subprocess.run(base+["-l",str(worker)],capture_output=True,text=True)
 if lint.returncode: raise SystemExit("LINT_FAILED "+lint.stdout)
@@ -75,12 +75,12 @@ km.execute("UPDATE clients SET deleted_at='2026-11-22' WHERE id='sync-ob-1-1'");
 assert km.execute("SELECT deleted_at FROM clients WHERE id='sync-ob-1-1'").fetchone()[0]
 print("DELETED_CLIENT_NOT_RESTORED_OK")
 ob.execute("INSERT INTO contacts(user_id,first_name,last_name,email) VALUES(1,'Synthetic','Match','match@example.invalid')")
-km.execute("INSERT INTO clients VALUES(?,?,1,'','')",("match",json.dumps(client("match","Synthetic","Match","match@example.invalid"))))
+km.execute("INSERT INTO clients VALUES(?,?,1,'','')",("31296",json.dumps(client("31296","Synthetic","Match","match@example.invalid"))))
 ob.commit();km.commit();before=(count(ob,"contacts"),count(km,"clients"));run()
 assert before==(count(ob,"contacts"),count(km,"clients"))
 print("UNIQUE_IDENTITY_LINK_WITHOUT_DUPLICATE_OK")
 ob.execute("INSERT INTO contacts(user_id,first_name,last_name) VALUES(1,'Ambiguous','Identity')")
-km.execute("INSERT INTO clients VALUES(?,?,1,'','')",("ambiguous",json.dumps(client("ambiguous","Ambiguous","Identity"))))
+km.execute("INSERT INTO clients VALUES(?,?,1,'','')",("83567",json.dumps(client("83567","Ambiguous","Identity"))))
 ob.commit();km.commit();before=(count(ob,"contacts"),count(km,"clients"));r=run()
 assert before==(count(ob,"contacts"),count(km,"clients")) and r["conflicts"]>=1
 print("NAME_ONLY_MATCH_BLOCKED_OK")
