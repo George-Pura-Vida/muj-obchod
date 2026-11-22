@@ -47,7 +47,7 @@ def client(cid,first,last,email=""):
 r=run("--dry-run","--fixture-only")
 assert count(km,"clients")==0 and count(km,"entries")==0
 print("DRY_RUN_ROLLBACK_OK")
-r=run("--fixture-only");assert r["created_km"]==1 and r["entries_to_km"]==1
+r=run("--fixture-only");assert r["created_km"]==1 and r["entries_to_km"]==1,r
 e=km.execute("SELECT body FROM entries").fetchone()[0]
 assert all(s in e for s in ("TEST-BODY","TEST-OPENING","TEST-FINDINGS","TEST-SUMMARY"))
 print("OBCHOD_TO_KMEN_FULL_BODY_OK")
