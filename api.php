@@ -294,7 +294,7 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
                     reply(['ok'=>true,'id'=>(int)$previous['activity_id'],'duplicate'=>true]);
                 }
             }
-            $db->prepare('INSERT INTO activities(user_id,contact_id,kind,happened_at,notes,outcome,next_at,transcript,review) VALUES(?,?,?,?,?,?,?,?,?)'->execute([$uid,$cid,$kind,$at,$notes,val($data,'outcome',500),$nextAt,val($data,'transcript',120000),val($data,'review',20000)]);
+            $db->prepare('INSERT INTO activities(user_id,contact_id,kind,happened_at,notes,outcome,next_at,transcript,review) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$uid,$cid,$kind,$at,$notes,val($data,'outcome',500),$nextAt,val($data,'transcript',120000),val($data,'review',20000)]);
             $id=(int)$db->lastInsertId();
             if ($requestKey!=='') {
                 $db->prepare('INSERT INTO activity_request_keys(user_id,request_key,activity_id,payload_hash) VALUES(?,?,?,?)')
