@@ -126,6 +126,13 @@ CREATE TABLE IF NOT EXISTS activity_details (
     next_note TEXT NOT NULL DEFAULT '',
     followup_activity_id INTEGER REFERENCES activities(id) ON DELETE SET NULL
 );
+CREATE TABLE IF NOT EXISTS activity_request_keys (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    request_key TEXT NOT NULL,
+    activity_id INTEGER NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+    payload_hash TEXT NOT NULL,
+    PRIMARY KEY(user_id, request_key)
+);
 CREATE TABLE IF NOT EXISTS activity_conversation (
     activity_id INTEGER PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
     topic_notes TEXT NOT NULL,
@@ -270,9 +277,28 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
                 $note=val($data,'guide_'.$topic,3000);
                 if($note!=='')$topics[$topic]=$note;
             }
+            // Optional idempotency key for DIANA and other API clients.
+            // Existing UI calls without a key keep their previous behavior.
+            $requestKey=val($data,'request_key',80);
+            if ($requestKey!=='' && !preg_match('/^[A-Za-z0-9_-]{1,80}$/D',$requestKey)) fail('Neplatný identifikátor zápisu.');
+            $payloadHash=$requestKey!=='' ? hash('sha256',json_encode($data,JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE)) : '';
             $db->beginTransaction();
-            $db->prepare('INSERT INTO activities(user_id,contact_id,kind,happened_at,notes,outcome,next_at,transcript,review) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$uid,$cid,$kind,$at,$notes,val($data,'outcome',500),$nextAt,val($data,'transcript',120000),val($data,'review',20000)]);
+            if ($requestKey!=='') {
+                $existing=$db->prepare('SELECT activity_id,payload_hash FROM activity_request_keys WHERE user_id=? AND request_key=?');
+                $existing->execute([$uid,$requestKey]);
+                $previous=$existing->fetch();
+                if ($previous) {
+                    $db->commit();
+                    if (!hash_equals($previous['payload_hash'],$payloadHash)) fail('Identifikátor zápisu byl použit s jiným obsahem.',409);
+                    reply(['ok'=>true,'id'=>(int)$previous['activity_id'],'duplicate'=>true]);
+                }
+            }
+            $db->prepare('INSERT INTO activities(user_id,contact_id,kind,happened_at,notes,outcome,next_at,transcript,review) VALUES(?,?,?,?,?,?,?,?,?)'->execute([$uid,$cid,$kind,$at,$notes,val($data,'outcome',500),$nextAt,val($data,'transcript',120000),val($data,'review',20000)]);
             $id=(int)$db->lastInsertId();
+            if ($requestKey!=='') {
+                $db->prepare('INSERT INTO activity_request_keys(user_id,request_key,activity_id,payload_hash) VALUES(?,?,?,?)')
+                    ->execute([$uid,$requestKey,$id,$payloadHash]);
+            }
             $db->prepare('INSERT INTO activity_details(activity_id,opening,findings,summary,result_status,next_kind,next_time,next_note) VALUES(?,?,?,?,?,?,?,?)')
                 ->execute([$id,val($data,'opening',3000),val($data,'findings',10000),val($data,'summary',5000),$status,$nextKind,$nextTime,$nextNote]);
             if($topics||$referralIntro!==''||$teamConversation)$db->prepare('INSERT INTO activity_conversation(activity_id,topic_notes,referral_intro,context) VALUES(?,?,?,?)')
