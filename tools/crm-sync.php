@@ -76,7 +76,8 @@ function syncRun(string $root,string $owner,bool $dry,bool $fixture): array {
     $users=query($db,'SELECT id FROM ob.users WHERE lower(email)=lower(?)',[$owner]);
     if(count($users)!==1)throw new RuntimeException('owner_not_unique');$uid=(int)$users[0]['id'];
     $stats=['ok'=>true,'dry_run'=>$dry,'fixture_only'=>$fixture,'created_ob'=>0,'created_km'=>0,'updated_contacts'=>0,'entries_to_ob'=>0,'entries_to_km'=>0,'conflicts'=>0];
-    $conflict=static function(string $type,string $ref,string $reason)use($db,&$stats):void{
+    $conflict=static function(string $type,string|int $ref,string $reason)use($db,&$stats):void{
+        $ref=(string)$ref;
         writeq($db,'INSERT INTO conflicts VALUES(?,?,?) ON CONFLICT(type,ref) DO UPDATE SET reason=excluded.reason',[$type,$ref,$reason]);$stats['conflicts']++;
     };
     $db->exec('BEGIN IMMEDIATE');
@@ -105,7 +106,7 @@ function syncRun(string $root,string $owner,bool $dry,bool $fixture): array {
             // Never introduce a duplicate identifier through an update.
             $collision=false;
             foreach($obs as $id=>$v)if($id!==$oid&&array_intersect(identities($new),identities($v['fields'])))$collision=true;
-            foreach($kms as $id=>$v)if($id!==$kid&&array_intersect(identities($new),identities($v['fields'])))$collision=true;
+            foreach($kms as $id=>$v)if((string)$id!==(string)$kid&&array_intersect(identities($new),identities($v['fields'])))$collision=true;
             if($collision){$conflict('contact',(string)$oid,'identifier_collision');continue;}
             if($of!==$new)updateContact($db,$oid,$kid,$new,'ob');
             if($kf!==$new)updateContact($db,$oid,$kid,$new,'km');
@@ -191,5 +192,5 @@ function syncRun(string $root,string $owner,bool $dry,bool $fixture): array {
 if(realpath($_SERVER['SCRIPT_FILENAME']??'')===__FILE__){
     $options=getopt('',['root:','owner:','dry-run','fixture-only']);
     try{echo enc(syncRun($options['root']??dirname(__DIR__,2),$options['owner']??'jgjanousek@gmail.com',isset($options['dry-run']),isset($options['fixture-only'])))."\n";}
-    catch(Throwable $e){fwrite(STDERR,enc(['ok'=>false,'status'=>'blocked','error_class'=>get_class($e)])."\n");exit(1);}
+    catch(Throwable $e){fwrite(STDERR,enc(['ok'=>false,'status'=>'blocked','error_class'=>get_class($e),'error_line'=>$e->getLine()])."\n");exit(1);}
 }
