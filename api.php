@@ -162,7 +162,32 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
     if(!is_array($cfg))$cfg=[];
     $setupKey=(string)(getenv('MS_SETUP_KEY')?:($cfg['setup_key']??''));
     $setupAvailable=$userCount===0 && strlen($setupKey)>=32;
-    $account=sessionAccount($db);
+    $diana=$action==='diana_note';
+    if($diana){
+        if($method!=='POST' || !$secure) fail('Požadavek nebyl nalezen.',404);
+        $dianaHash=(string)getenv('DIANA_NOTE_TOKEN_SHA256');
+  $dianaHeader=$_SERVER['HTTP_AUTHORIZATION']??'';
+  if(!preg_match('/^[a-f0-9]{64}$/D',$dianaHash)) fail('Požadavek nebyl nalezen.',404);
+  if(!preg_match('/^Bearer ([a-f0-9]{64})$/D',$dianaHeader,$dianaMatch)
+     || !hash_equals($dianaHash,hash('sha256',$dianaMatch[1]))) fail('Přístup Diany nebyl ověřen.',401);
+  if((int)($_SERVER['CONTENT_LENGTH']??0)>32768) fail('Zápis je příliš velký.',413);
+        $ownerId=filter_var(getenv('DIANA_NOTE_OWNER_ID'),FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
+        $allowed=filter_var(getenv('DIANA_NOTE_CLIENT_ID'),FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
+        if(!$ownerId || !$allowed) fail('Přístup Diany není nastaven.',403);
+        $q=$db->prepare('SELECT u.*,p.* FROM users u JOIN account_profiles p ON p.user_id=u.id WHERE u.id=? AND p.active=1');
+        $q->execute([$ownerId]);
+        $account=$q->fetch();
+        if(!$account) fail('Přístup Diany není nastaven.',403);
+        $input=body();
+        if(($input['contact_id']??null)!==$allowed) fail('Klient není povolen pro Dianu.',403);
+        if(!is_string($input['request_key']??null) || !str_starts_with($input['request_key'],'diana_')) fail('Neplatné ID zápisu Diany.',422);
+        $dianaData=array_intersect_key($input,array_flip(['contact_id','notes','happened_at','request_key']));
+        $dianaData['kind']='note';
+        if(val($dianaData,'notes',5000)==='' || dateValue($dianaData,'happened_at')===null) fail('Doplň text a datum zápisu.',422);
+        $action='activity';
+    }else{
+        $account=sessionAccount($db);
+    }
     $access=$account ? permissions($account) : null;
     $publicActions=['register','login','reset_request','reset_redeem'];
     if($method!=='POST' && $action==='meta'){
@@ -180,8 +205,8 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
     if(!$account) fail('Pro tuto akci se přihlas.',401);
     $uid=(int)$account['id'];
     if($method==='POST'){
-        csrf();
-        $data=$action==='upload' ? $_POST : body();
+        if(!$diana) csrf();
+        $data=$diana ? $dianaData : ($action==='upload' ? $_POST : body());
         if($action==='logout'){
             audit($db,'logout',$uid,$uid);
             $_SESSION=[];
