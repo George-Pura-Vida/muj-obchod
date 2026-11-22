@@ -4,6 +4,7 @@ header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store');
 header('Referrer-Policy: same-origin');
 require __DIR__.'/account-admin.php';
+require __DIR__.'/diana-contact.php';
 ini_set('display_errors','0');
 ini_set('session.use_strict_mode','1');
 ini_set('session.use_only_cookies','1');
@@ -162,7 +163,9 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
     if(!is_array($cfg))$cfg=[];
     $setupKey=(string)(getenv('MS_SETUP_KEY')?:($cfg['setup_key']??''));
     $setupAvailable=$userCount===0 && strlen($setupKey)>=32;
-    $diana=$action==='diana_note';
+    $dianaContact=$action==='diana_contact';
+    $diana=$action==='diana_note'||$dianaContact;
+    $dianaAll=getenv('DIANA_CRM_WRITE')==='all';
     if($diana){
         if($method!=='POST' || !$secure) fail('Požadavek nebyl nalezen.',404);
         $dianaHash=(string)getenv('DIANA_NOTE_TOKEN_SHA256');
@@ -173,13 +176,26 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
   if((int)($_SERVER['CONTENT_LENGTH']??0)>32768) fail('Zápis je příliš velký.',413);
         $ownerId=filter_var(getenv('DIANA_NOTE_OWNER_ID'),FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
         $allowed=filter_var(getenv('DIANA_NOTE_CLIENT_ID'),FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
-        if(!$ownerId || !$allowed) fail('Přístup Diany není nastaven.',403);
+        if(!$ownerId || (!$dianaAll && !$allowed)) fail('Přístup Diany není nastaven.',403);
         $q=$db->prepare('SELECT u.*,p.* FROM users u JOIN account_profiles p ON p.user_id=u.id WHERE u.id=? AND p.active=1');
         $q->execute([$ownerId]);
         $account=$q->fetch();
         if(!$account) fail('Přístup Diany není nastaven.',403);
         $input=body();
-        if(($input['contact_id']??null)!==$allowed) fail('Klient není povolen pro Dianu.',403);
+        if($dianaContact){
+            if(($_SERVER['HTTP_ORIGIN']??'')!=='') fail('Nepovolený původ požadavku.',403);
+            if(!$dianaAll) fail('Přístup Diany ke kartám není povolen.',403);
+            $rights=permissions($account);
+            requireRight($rights, isset($input['contact_id']) ? 'contact_edit' : 'contact_create');
+            try {
+                reply(dianaContactOperation($db,$ownerId,$input,static function($id,$expected,$changes) use ($db,$ownerId){
+                    return dianaSaveObchodContact($db,$ownerId,$id,$expected,$changes);
+                }));
+            } catch (DomainException $e) { fail($e->getMessage(),$e->getCode()); }
+        }
+        $contactId=$input['contact_id']??null;
+        if(!$dianaAll && $contactId!==$allowed) fail('Klient není povolen pro Dianu.',403);
+        if(!is_int($contactId) || $contactId<1) fail('Neplatné ID klienta.',422);
         if(!is_string($input['request_key']??null) || !str_starts_with($input['request_key'],'diana_')) fail('Neplatné ID zápisu Diany.',422);
         $dianaData=array_intersect_key($input,array_flip(['contact_id','notes','happened_at','request_key']));
         $dianaData['kind']='note';
