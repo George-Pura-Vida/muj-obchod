@@ -156,6 +156,28 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
     $setupKey=(string)(getenv('MS_SETUP_KEY')?:($cfg['setup_key']??''));
     $setupAvailable=$userCount===0 && strlen($setupKey)>=32;
     $account=sessionAccount($db);
+    // A dedicated credential can only use the existing read handlers.
+    // Account permissions, ownership, and recording checks still apply below.
+    if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+        $authorization = (string) $_SERVER['HTTP_AUTHORIZATION'];
+        if (preg_match('/\\ABearer(?:[ \\t]|\\z)/i', $authorization)) {
+            if (!$secure) fail('Použij HTTPS.',403);
+            if ($method !== 'GET' || !in_array($action,['state','media','media_chunk'],true)) {
+                fail('Tento přístup je pouze pro čtení klientských údajů.',405);
+            }
+            $ownerId = $cfg['diana_crm_reader_owner_id'] ?? null;
+            $hash = $cfg['diana_crm_reader_token_sha256'] ?? null;
+            if (!is_int($ownerId) || $ownerId < 1 ||
+                !is_string($hash) || !preg_match('/\\A[0-9a-f]{64}\\z/', $hash) ||
+                !preg_match('/\\ABearer ([0-9a-f]{64})\\z/i', $authorization, $match) ||
+                !hash_equals($hash,hash('sha256',$match[1]))) {
+                fail('Neplatný přístupový token.',401);
+            }
+            $account = account($db,$ownerId);
+            if (!$account || !$account['active']) fail('Účet je nedostupný.',403);
+            header('Cache-Control: private, no-store');
+        }
+    }
     $access=$account ? permissions($account) : null;
     $publicActions=['register','login','reset_request','reset_redeem'];
     if($method!=='POST' && $action==='meta'){
