@@ -10,6 +10,8 @@ const ROLES = ['admin'=>'Admin', 'editor'=>'Editor', 'user'=>'Uživatel', 'viewe
 const RIGHTS = [
     'contact_create'=>['Přidat kontakt',['people','team']],
     'contact_edit'=>['Upravit kontakt',['people']],
+    'contact_delete'=>['Smazat klienta včetně jeho záznamů',['people']],
+    'activity_delete'=>['Smazat jednotlivý zápis',['people']],
     'activity'=>['Zapsat schůzku nebo telefonát',['day']],
     'care_activity'=>['Zapsat a naplánovat péči',['care']],
     'team_activity'=>['Zapsat a naplánovat spolupráci',['team']],
@@ -87,7 +89,7 @@ function permissions(array $account): array {
     $userRights = ['contact_create','activity','care_activity','team_activity','opportunity',
         'referral','review','coaching_scorecard','practice_session','media','upload'];
     foreach (RIGHTS as $id => [$label, $sections]) {
-        $default = $role === 'editor' ? $id !== 'backup' : in_array($id, $userRights, true);
+        $default = $role === 'editor' ? !in_array($id,['backup','contact_delete','activity_delete'],true) : in_array($id, $userRights, true);
         $allowed = $role === 'admin' || ($role === 'viewer'
             ? $id === 'media' && ($overrides['actions'][$id] ?? true)
             : ($overrides['actions'][$id] ?? $default));

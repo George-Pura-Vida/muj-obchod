@@ -372,6 +372,7 @@ function person(cid){
   (c.collaboration_stage?'<p>Spolupráce: <b>'+esc(COLLABORATION_STAGES[c.collaboration_stage]||'')+'</b></p>':'')+
   (c.notes?'<p>📝 '+esc(c.notes)+'</p>':'')+'</div>';
  html+='<div class="person-actions"><button data-action="edit" data-cid="'+Number(cid)+'">'+icon('users')+' Upravit</button><button data-action="activity" data-cid="'+Number(cid)+'">'+icon('mic')+' Schůzka / telefon</button><button data-action="contract" data-cid="'+Number(cid)+'">'+icon('file')+' Nová smlouva</button><button data-action="care" data-cid="'+Number(cid)+'">'+icon('heart')+' Následná péče</button><button data-action="opportunity" data-cid="'+Number(cid)+'">'+icon('branch')+' Další prodej</button><button data-action="referral" data-cid="'+Number(cid)+'">'+icon('gift')+' Doporučení</button></div>';
+ if(allowedAction('contact_delete'))html+='<div class="person-actions"><button type="button" class="button outline" style="color:#aa3434" data-delete-contact="'+Number(cid)+'">🗑 Smazat klienta</button></div>';
  html+='<section class="detail-section"><h3>📝 Schůzky, telefonáty a zápisy ('+acts.length+')</h3>';
  html+=acts.length?acts.map(a=>{
   const rec=recordings.filter(r=>+r.activity_id===+a.id);
@@ -386,7 +387,8 @@ function person(cid){
    (sections?'<details class="activity-notes"><summary>Průběh a závěr</summary><dl>'+sections+'</dl></details>':'')+next+
    (a.next_at&&!a.followup_activity_id?'<button data-followup="'+Number(a.id)+'">Zapsat návaznost</button>':'')+
    '</div><button data-coach="'+Number(a.id)+'">✨ AI trénink</button>'+
-   (rec.length?'<button data-audio="'+Number(rec[0].id)+'" data-activity="'+Number(a.id)+'">▶ Audio</button>':'<button data-record="'+Number(a.id)+'">🎙️ Nahrát</button>')+'</div>';
+   (rec.length?'<button data-audio="'+Number(rec[0].id)+'" data-activity="'+Number(a.id)+'">▶ Audio</button>':'<button data-record="'+Number(a.id)+'">🎙️ Nahrát</button>')+
+   (allowedAction('activity_delete')?'<button type="button" style="color:#aa3434" data-delete-activity="'+Number(a.id)+'">🗑 Smazat zápis</button>':'')+'</div>';
  }).join(''):noRows('Zatím žádná schůzka.');
  html+='</section><section class="detail-section"><h3>✍️ Smlouvy a provize ('+contracts.length+')</h3>';
  html+=contracts.length?contracts.map(x=>'<div class="detail-row"><div><b>'+esc(x.product)+'</b><small>Objem '+euros(x.value)+' · očekáváno '+euros(x.commission_expected)+' ('+when(x.expected_at)+')</small><small>Vyplaceno '+euros(x.commission_paid)+' ('+when(x.paid_at)+') · '+esc(x.status)+'</small></div></div>').join(''):noRows('Zatím bez smlouvy.');
@@ -397,6 +399,29 @@ function person(cid){
  html+='</section>';
  $('person-body').innerHTML=html;
  syncAccessControls($('person-body'));openDialog('person-dialog');
+}
+let deletingRecord=false;
+async function deleteRecord(kind,id,button){
+ const contact=kind==='contact'?findContact(id):null;
+ const activity=kind==='activity'?store.activities.find(a=>Number(a.id)===id):null;
+ if(deletingRecord||!allowedAction(kind+'_delete')||(!contact&&!activity))return;
+ const message=contact
+  ? 'Trvale smazat klienta '+full(contact)+'?\n\nOdstraní se také všechny jeho zápisy, schůzky, smlouvy, provize, příležitosti, doporučení a nahrávky v Mém obchodu. Tuto akci nelze vrátit.'
+  : 'Trvale smazat zápis '+(KINDS[activity.kind]||'Poznámka')+' ze dne '+when(activity.happened_at)+' u klienta '+fullname(activity.contact_id)+'?\n\nOdstraní se také jeho nahrávky a hodnocení. Klient zůstane zachovaný. Tuto akci nelze vrátit.';
+ if(!confirm(message))return;
+ deletingRecord=true;button.disabled=true;
+ let removed=false;
+ try{
+  const result=await request(kind+'_delete',{id,confirmed:true});
+  removed=true;
+  await refresh();
+  if(contact){if($('person-dialog').open)$('person-dialog').close();personId=0;}
+  else person(Number(activity.contact_id));
+  toast((contact?'Klient byl smazán.':'Zápis byl smazán.')+(result.cleanup_pending?' Některé zvukové soubory vyžadují dočištění na serveru.':''));
+ }catch(error){
+  if(removed&&$('person-dialog').open)$('person-dialog').close();
+  toast(removed?'Záznam byl smazán, ale přehled se nepodařilo obnovit. Obnov stránku.':error.message,true);
+ }finally{deletingRecord=false;button.disabled=false;}
 }
 function contactOptions(selected){
  return '<option value="">Vyber člověka…</option>'+store.contacts.slice().sort((a,b)=>full(a).localeCompare(full(b),'cs')).map(c=>'<option value="'+Number(c.id)+'" '+(+selected===+c.id?'selected':'')+'>'+esc(full(c))+'</option>').join('');
@@ -1024,6 +1049,8 @@ async function logout(){
 document.addEventListener('click',event=>{
  const target=event.target.closest('button,[data-action],[data-view],[data-person],[data-close],[data-record],[data-coach],[data-audio]');
  if(!target||!controlAllowed(target))return;
+ if(target.dataset.deleteContact){deleteRecord('contact',Number(target.dataset.deleteContact),target);return;}
+ if(target.dataset.deleteActivity){deleteRecord('activity',Number(target.dataset.deleteActivity),target);return;}
  if(target.dataset.close){closeDialog(target.dataset.close);return;}
  if(target.dataset.view){go(target.dataset.view);return;}
  if(target.dataset.person){person(Number(target.dataset.person));return;}

@@ -4,6 +4,7 @@ header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store');
 header('Referrer-Policy: same-origin');
 require __DIR__.'/account-admin.php';
+require __DIR__.'/delete-record.php';
 require __DIR__.'/diana-contact.php';
 require __DIR__.'/diana-voice.php';
 ini_set('display_errors','0');
@@ -240,6 +241,14 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         if($action==='password_change') changePassword($db,$account,$data);
         if(str_starts_with($action,'admin_')) handleAdmin($db,$action,$account,$data,$cfg);
         authorizeWrite($access,$action,$data);
+        if($action==='contact_delete' || $action==='activity_delete'){
+            if(($data['confirmed']??null)!==true) fail('Potvrď trvalé odstranění.');
+            $id=$data['id']??null;
+            if(!is_int($id)||$id<1) fail('Neplatné ID.');
+            try {
+                reply(deleteOwnedRecord($db,$uid,$action,$id,$private));
+            } catch (DomainException $e) { fail($e->getMessage(),$e->getCode()); }
+        }
         if($action==='contact'){
             $id=(int)($data['id']??0);
             $first=val($data,'first_name',100);$last=val($data,'last_name',100);

@@ -16,3 +16,12 @@ jobs:
           node-version: '22'
       - run: node --check support.js && node --check support-payment.js && node --check vendor/qrcodegen.js
       - run: node --test support.test.mjs
+
+      - name: Verify CRM deletion
+        run: |
+          php -l api.php
+          php -l account-admin.php
+          php -l delete-record.php
+          php -l index.php
+          node --check app.js
+          php delete-record.test.php
