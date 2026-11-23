@@ -1,0 +1,23 @@
+name: DIANA ChatGPT bridge tests
+on:
+  pull_request:
+    paths:
+      - 'tools/diana_chatgpt/**'
+      - '.github/workflows/diana-chatgpt-tests.yml'
+  push:
+    branches:
+      - 'feature/diana-chatgpt-voice-bridge-20261123'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r tools/diana_chatgpt/requirements.txt
+      - run: python -m unittest -v test_bridge test_protocol
+        working-directory: tools/diana_chatgpt
