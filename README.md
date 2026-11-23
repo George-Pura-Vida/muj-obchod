@@ -30,6 +30,7 @@ Při založení účtu vystav ve správě jednorázový odkaz k nastavení hesla
 - Nahrávání schůzek používá mikrofon v prohlížeči přes MediaRecorder, tedy vyžaduje HTTPS, souhlas s mikrofonem a výslovné oprávnění k pořízení záznamu.
 - **Nahrávání telefonního hovoru přímo z mobilního prohlížeče není spolehlivě podporováno.** Nahrávku lze do zápisu přiložit ručně.
 - Nahrávky se ukládají mimo veřejnou složku a přehrávají přes ověřený PHP endpoint.
+- Funkci **Diktovat Dianě** zapíná serverová proměnná `DIANA_OPENAI_API_KEY` nebo privátní položka `diana_openai_api_key` v `config.local.php`. Server potřebuje PHP cURL a přístup k OpenAI API. Diktát do jedné minuty se odešle k českému přepisu a v prohlížeči doplní pole Průběh. Zápis vznikne po stisku Uložit. Hlasové potvrzení používá hlas Coral.
 - Textový přepis a vyhodnocení se v této verzi zapisují ručně. Tlačítko *Připravit pro AI kouče* vytvoří prompt z tvého přepisu, který můžeš dobrovolně zkopírovat do ChatGPT (bez automatického přenosu dat). **Žádná automatická transkripce ani AI API zatím nejsou připojené.**
 - Před nahráváním a odesláním do externí AI řeš informování/souhlas účastníků, právní titul, zabezpečení, dobu uchování a citlivé údaje.
 

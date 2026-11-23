@@ -9,4 +9,6 @@ return [
     'public_url' => '',
     // Ověřená odesílací adresa na hostingu. Prázdná hodnota vypne obnovu e-mailem.
     'reset_from' => '',
+    // Hlas Diany. Lze nastavit také serverovou proměnnou DIANA_OPENAI_API_KEY.
+    'diana_openai_api_key' => '',
 ];

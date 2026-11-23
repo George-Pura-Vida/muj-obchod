@@ -5,6 +5,7 @@ header('Cache-Control: no-store');
 header('Referrer-Policy: same-origin');
 require __DIR__.'/account-admin.php';
 require __DIR__.'/diana-contact.php';
+require __DIR__.'/diana-voice.php';
 ini_set('display_errors','0');
 ini_set('session.use_strict_mode','1');
 ini_set('session.use_only_cookies','1');
@@ -211,6 +212,7 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
         reply(['ok'=>true,'csrf'=>$_SESSION['csrf'],'authenticated'=>(bool)$account,'email'=>$account['email']??null,
             'account'=>$account ? publicAccount($account) : null,'access'=>$access,
             'can_backup'=>$access ? canBackup($access) : false,'appearance'=>$account ? getAppearance($db) : [],
+            'diana_voice'=>$access && dianaVoiceAllowed($access) && dianaVoiceKey($cfg)!=='' && extension_loaded('curl'),
             'setup_required'=>$userCount===0,'setup_available'=>$setupAvailable,'reset_available'=>(bool)($url&&$sender)]);
     }
     if(in_array($action,$publicActions,true)){
@@ -222,6 +224,9 @@ CREATE INDEX IF NOT EXISTS idx_opportunities_contact ON opportunities(contact_id
     $uid=(int)$account['id'];
     if($method==='POST'){
         if(!$diana) csrf();
+        if($action==='diana_transcribe' || $action==='diana_speech'){
+            dianaVoice($db,$uid,$access,$cfg,$action);
+        }
         $data=$diana ? $dianaData : ($action==='upload' ? $_POST : body());
         if($action==='logout'){
             audit($db,'logout',$uid,$uid);

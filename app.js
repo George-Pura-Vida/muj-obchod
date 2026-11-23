@@ -55,6 +55,7 @@ const COACHING_AVERAGE = new Intl.NumberFormat('cs-CZ',{minimumFractionDigits:1,
 let csrf = '';
 let store = {contacts:[],activities:[],contracts:[],opportunities:[],referrals:[],recordings:[],scorecards:[]};
 let view='overview', editingContactId=0, formKind='',formPrefill={};
+let dianaVoiceEnabled=false, dictation=null, activityDraft=null, voiceConfirmation=null;
 let personId=0, coachActivityId=0, recordActivityId=0, wantRecording=false;
 let scorecardActivityId=0;
 let practiceStageId='';
@@ -105,6 +106,7 @@ async function start(){
 async function signedIn(meta){
  const account=meta||await request('meta');
  csrf=account.csrf;
+ dianaVoiceEnabled=account.diana_voice===true;
  setAccountContext(account);
  await refresh();
  $('settings-email').value=account.email||'';
@@ -504,6 +506,8 @@ function openForm(kind,cid=0,extra={}){
  }
  if(kind!=='contact'&&kind!=='edit'&&!store.contacts.length){toast('Nejdřív přidej prvního člověka. 🙂');kind='contact';}
  if($('person-dialog').open)$('person-dialog').close();
+ cancelDictation();
+ activityDraft={usedVoice:false,attempts:new Map()};
  formKind=kind;formPrefill=extra;editingContactId=kind==='edit'?+cid:0;
  const c=kind==='edit'?findContact(cid):null;
  const tone=extra.teamConversation||extra.teamIntake?'team':extra.followup?processForTask({topic:extra.followup.next_kind}):
@@ -545,6 +549,10 @@ function openForm(kind,cid=0,extra={}){
   field('Datum','happened_at',TODAY(),'date',true))+
   renderGuide(extra.guideTopic||(kind==='care'?'care':''))+
   '<fieldset class="form-section" data-process="'+tone+'"><legend>02 · Průběh rozhovoru</legend>'+
+  (dianaVoiceEnabled?
+   '<div class="notice"><button type="button" class="button outline" id="diana-dictate">'+icon('mic')+' Diktovat Dianě</button>'+
+   '<p>Krátký diktát se odešle do OpenAI k přepisu. Po uložení zazní potvrzení hlasem AI.</p>'+
+   '<p id="diana-voice-status" role="status"></p></div>':'')+
   '<div class="row-fields">'+textArea('👋 Otevření','opening','','Jak jsem navázal kontakt a domluvil účel?')+
   textArea('💬 Průběh','notes','','Hlavní téma, otázky a reakce klienta…')+'</div>'+
   '<div class="row-fields">'+textArea('🔎 Zjištění','findings','','Co jsem zjistil o potřebách, prioritách nebo překážkách?')+
@@ -601,21 +609,36 @@ function openForm(kind,cid=0,extra={}){
  $('form-context').textContent=({contact:'KLIENT A KONTAKT',meeting:'SCHŮZKY A HOVORY',care:'PÉČE O KLIENTA',contract:'OBCHOD A PROVIZE',referral:'DOPORUČENÍ',team:'TÝM A SPOLUPRÁCE'})[tone];
  $('form-title').textContent=title;
  $('form-fields').innerHTML=html;
+ $('diana-dictate')?.addEventListener('click',toggleDictation);
  updateGuideSuggestion();
  $('form-error').textContent='';
  openDialog('form-dialog');
 }
 async function saveForm(e){
  e.preventDefault();const form=e.currentTarget;const data=Object.fromEntries(new FormData(form));
+ const saveButton=form.querySelector('[type="submit"]');
+ if(saveButton.disabled||dictation)return;
  let kind=formKind==='edit'?'contact':formKind==='care'?'activity':formKind;
  if(formKind==='edit')data.id=editingContactId;
  if(formKind==='referral')data.permission=form.elements.permission?.checked?1:0;
  if(kind!=='contact'&&!data.contact_id){$('form-error').textContent='Vyber člověka.';return;}
+ const voice=kind==='activity'&&activityDraft?.usedVoice;
+ if(voice){
+  const payload=JSON.stringify(data);
+  if(!activityDraft.attempts.has(payload)){
+   activityDraft.attempts.set(payload,'diana_voice_'+crypto.randomUUID());
+  }
+  data.request_key=activityDraft.attempts.get(payload);
+ }
  try{
-  const saveButton=form.querySelector('[type="submit"]');saveButton.disabled=true;
+  saveButton.disabled=true;
+  if($('diana-dictate'))$('diana-dictate').disabled=true;
   const result=await request(kind,data);
-  $('form-dialog').close();await refresh();
+  $('form-dialog').close();
+  if(voice)void sayVoiceConfirmation();
   toast('Uloženo! Další krok je zase o něco blíž. ✨');
+  try{await refresh();}
+  catch{toast('Uloženo. Přehled se nepodařilo načíst, obnov stránku.',true);return;}
   if(kind==='contact'){go(formPrefill.teamIntake?'team':'people');person(result.id);}
   else if(kind==='activity'){
    go(formPrefill.teamConversation?'team':formKind==='care'||view==='care'?'care':'day');
@@ -627,7 +650,99 @@ async function saveForm(e){
    go('results');
   }
  }catch(err){$('form-error').textContent=err.message;}
- finally{form.querySelector('[type="submit"]').disabled=false;}
+ finally{
+  saveButton.disabled=false;
+  if($('diana-dictate'))$('diana-dictate').disabled=false;
+ }
+}
+function cancelDictation(){
+ const current=dictation;
+ dictation=null;
+ if(!current)return;
+ clearTimeout(current.timer);
+ current.stream?.getTracks().forEach(track=>track.stop());
+}
+async function toggleDictation(event){
+ const button=event.currentTarget;
+ const status=$('diana-voice-status');
+ if(dictation){
+  if(dictation.recorder?.state==='recording')dictation.recorder.stop();
+  return;
+ }
+ if(!window.MediaRecorder||!navigator.mediaDevices?.getUserMedia){
+  status.textContent='Mikrofon v tomto prohlížeči není dostupný. Zápis můžeš napsat ručně.';
+  return;
+ }
+ const current={};
+ const form=$('dynamic-form');
+ const notes=form.elements.notes;
+ const saveButton=form.querySelector('[type="submit"]');
+ const chunks=[];
+ dictation=current;
+ button.disabled=true;
+ saveButton.disabled=true;
+ status.textContent='Čekám na povolení mikrofonu…';
+ const finish=message=>{
+  if(dictation!==current)return;
+  cancelDictation();
+  button.disabled=false;
+  saveButton.disabled=false;
+  button.innerHTML=icon('mic')+' Diktovat Dianě';
+  status.textContent=message;
+ };
+ try{
+  const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+  if(dictation!==current||!$('form-dialog').open){
+   stream.getTracks().forEach(track=>track.stop());
+   return;
+  }
+  current.stream=stream;
+  const mimeType=['audio/webm;codecs=opus','audio/ogg;codecs=opus','audio/mp4']
+   .find(type=>MediaRecorder.isTypeSupported(type));
+  if(!mimeType)throw Error('Prohlížeč nepodporuje přepis svého formátu zvuku.');
+  const recorder=new MediaRecorder(stream,{mimeType,audioBitsPerSecond:32000});
+  current.recorder=recorder;
+  recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+  recorder.onerror=()=>finish('Nahrávku se nepodařilo pořídit. Zkus to znovu.');
+  recorder.onstop=async ()=>{
+   if(dictation!==current)return;
+   clearTimeout(current.timer);
+   stream.getTracks().forEach(track=>track.stop());
+   button.disabled=true;
+   status.textContent='Přepisuji diktát…';
+   try{
+    const audio=new Blob(chunks,{type:recorder.mimeType});
+    if(!audio.size||audio.size>1900000)throw Error('Nahrávka je prázdná nebo příliš velká.');
+    const data=new FormData();
+    const extension=recorder.mimeType.includes('ogg')?'ogg':recorder.mimeType.includes('mp4')?'mp4':'webm';
+    data.append('audio',audio,'diktat.'+extension);
+    const {text}=await request('diana_transcribe',data,true);
+    if(dictation!==current||!$('form-dialog').open)return;
+    const combined=[notes.value.trimEnd(),text].filter(Boolean).join('\n');
+    if(new TextEncoder().encode(combined).length>20000)throw Error('Diktát se nevejde do poznámky. Zkrať ji nebo rozděl zápis.');
+    notes.value=combined;
+    activityDraft.usedVoice=true;
+    finish('Přepis je připravený. Zkontroluj text a klienta, potom zápis ulož.');
+    notes.focus();
+   }catch(error){finish(error.message);}
+  };
+  recorder.start();
+  current.timer=setTimeout(()=>{if(recorder.state==='recording')recorder.stop();},60000);
+  button.textContent='Ukončit diktát a přepsat';
+  button.disabled=false;
+  status.textContent='Nahrávám. Diktát může trvat až jednu minutu.';
+ }catch{
+  finish('Diktát nelze spustit. Zkontroluj oprávnění mikrofonu a zkus to znovu.');
+ }
+}
+async function sayVoiceConfirmation(){
+ try{
+  voiceConfirmation??=request('diana_speech',{}).then(result=>result.audio);
+  const audio=await voiceConfirmation;
+  await new Audio('data:audio/mpeg;base64,'+audio).play();
+ }catch{
+  voiceConfirmation=null;
+ }
 }
 function openDialog(id){const el=$(id);if(el&&!el.open)el.showModal();}
 function closeDialog(id){const el=$(id);if(el&&el.open)el.close();}
@@ -941,6 +1056,11 @@ $('auth-form').addEventListener('submit',async event=>{
  finally{$('auth-submit').disabled=false;}
 });
 $('dynamic-form').addEventListener('submit',saveForm);
+$('form-dialog').addEventListener('close',()=>{
+ if($('form-dialog').open)return;
+ if(dictation)$('dynamic-form').querySelector('[type="submit"]').disabled=false;
+ cancelDictation();
+});
 $('dynamic-form').addEventListener('change',event=>{
  if(event.target.name==='contact_id')updateGuideSuggestion();
  if(event.target.name==='next_kind')updateNextStepTone();
