@@ -86,6 +86,7 @@ async function request(action,data,form=false,retryCsrf=true){
  }
  if(response.status===401&&signedInAccount&&action!=='login')location.reload();
  if(!response.ok||!result.ok)throw Error(result.error||'Chyba serveru');
+ if(result.mfa_required)window.location.assign('mfa.php');
  return result;
 }
 async function start(){
@@ -1076,7 +1077,8 @@ $('auth-form').addEventListener('submit',async event=>{
  $('auth-error').textContent='';
  try{
   $('auth-submit').disabled=true;
-  await request(isFirst?'register':'login',data);
+  const loginResult=await request(isFirst?'register':'login',data);
+  if(loginResult.mfa_required){window.location.assign('mfa.php');return;}
   event.target.reset();
   await signedIn();toast('Vítej v Moje schůzka! 💚');
  }catch(e){$('auth-error').textContent=e.message;}

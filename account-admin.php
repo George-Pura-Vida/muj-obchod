@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/totp.php';
 
 const SCREENS = [
     'overview'=>'Přehled', 'people'=>'Lidé', 'day'=>'Můj den', 'care'=>'Péče a doporučení',
@@ -208,6 +209,7 @@ function publicAccount(array $row): array {
 
 function sessionAccount(PDO $db): ?array {
     if (empty($_SESSION['uid'])) return null;
+    if (($_SESSION['mfa_verified']??null)!==(int)$_SESSION['uid']) { $_SESSION=['csrf'=>bin2hex(random_bytes(24))]; return null; }
     $row = account($db, (int)$_SESSION['uid']);
     $now = time();
     if (!$row || !$row['active'] || (int)$row['session_version'] !== ($_SESSION['version'] ?? null) ||
@@ -219,11 +221,13 @@ function sessionAccount(PDO $db): ?array {
     return $row;
 }
 
-function openAccountSession(array $row): void {
+function openAccountSession(array $row, bool $mfaVerified=false): void {
+    if (!$mfaVerified) { mfa_begin($row); reply(['ok'=>true,'mfa_required'=>true,'url'=>'mfa.php']); }
+
     $_SESSION = [];
     if (!session_regenerate_id(true)) fail('Přihlášení se nepodařilo. Zkus to znovu.',503);
     $_SESSION = ['uid'=>(int)$row['id'], 'version'=>(int)$row['session_version'],
-        'seen'=>time(), 'issued'=>time(), 'csrf'=>bin2hex(random_bytes(24))];
+        'seen'=>time(), 'issued'=>time(), 'mfa_verified'=>(int)$row['id'], 'csrf'=>bin2hex(random_bytes(24))];
 }
 
 function validNewPassword(mixed $password): string {
