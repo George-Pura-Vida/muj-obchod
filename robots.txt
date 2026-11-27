@@ -1,0 +1,4 @@
+# Crawlers must be able to read the noindex response headers and meta tags.
+# Do not add Disallow: / here: it prevents removal of previously indexed URLs.
+User-agent: *
+Disallow:
